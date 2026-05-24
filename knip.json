@@ -1,0 +1,29 @@
+{
+  "workspaces": {
+    ".": {
+      "entry": [
+        "tooling/scripts/*.ts",
+        "playwright.config.ts",
+        "packages/ui/.storybook/*.ts"
+      ],
+      "project": ["**/*.{ts,tsx,js,mjs}"]
+    },
+    "apps/*": {
+      "entry": ["app/**/*.{ts,tsx}", "src/**/*.{ts,tsx}", "next.config.ts"],
+      "project": ["**/*.{ts,tsx}"]
+    },
+    "packages/*": {
+      "entry": ["src/index.ts", "src/**/*.test.{ts,tsx}"],
+      "project": ["src/**/*.{ts,tsx}"]
+    }
+  },
+  "ignoreDependencies": [
+    "@types/node",
+    "@types/react",
+    "@types/react-dom",
+    "autoprefixer",
+    "playwright",
+    "wrangler"
+  ],
+  "ignore": ["**/.next/**", "**/.open-next/**", "**/dist/**"]
+}

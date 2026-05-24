@@ -1,0 +1,37 @@
+{
+  "common": {
+    "appName": "Juris",
+    "loading": "Loading",
+    "error": "Something went wrong",
+    "retry": "Retry",
+    "save": "Save",
+    "cancel": "Cancel",
+    "search": "Search",
+    "settings": "Settings",
+    "logout": "Log out",
+    "theme": "Theme",
+    "language": "Language"
+  },
+  "nav": {
+    "home": "Home",
+    "console": "Console",
+    "admin": "Admin",
+    "billing": "Billing",
+    "reporting": "Reporting",
+    "settings": "Settings",
+    "support": "Support"
+  },
+  "auth": {
+    "login": "Sign in",
+    "logout": "Signed out",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot password",
+    "signIn": "Sign in"
+  },
+  "status": {
+    "healthy": "Healthy",
+    "degraded": "Degraded",
+    "unavailable": "Unavailable"
+  }
+}

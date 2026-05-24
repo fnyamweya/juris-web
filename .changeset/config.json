@@ -1,0 +1,40 @@
+{
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [
+    [
+      "@juris/admin",
+      "@juris/billing",
+      "@juris/console",
+      "@juris/docs",
+      "@juris/gateway",
+      "@juris/identity",
+      "@juris/public",
+      "@juris/reporting",
+      "@juris/settings",
+      "@juris/support",
+      "@repo/access-control",
+      "@repo/auth",
+      "@repo/config",
+      "@repo/contracts",
+      "@repo/eslint-config",
+      "@repo/i18n",
+      "@repo/platform",
+      "@repo/security",
+      "@repo/telemetry",
+      "@repo/testing",
+      "@repo/tokens",
+      "@repo/typescript-config",
+      "@repo/ui"
+    ]
+  ],
+  "linked": [],
+  "access": "restricted",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": [],
+  "privatePackages": {
+    "version": true,
+    "tag": false
+  }
+}

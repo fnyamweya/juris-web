@@ -1,0 +1,33 @@
+name: Deploy Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: Optional comma-separated deployable apps to redeploy
+        required: false
+        default: ""
+        type: string
+      version:
+        description: Optional semantic version override
+        required: false
+        default: ""
+        type: string
+      git_sha:
+        description: Optional commit SHA override
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/_cloudflare-deploy.yml
+    with:
+      environment: staging
+      scope: staging
+      apps: ${{ inputs.apps }}
+      version: ${{ inputs.version }}
+      git_sha: ${{ inputs.git_sha }}
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

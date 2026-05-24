@@ -1,0 +1,14 @@
+{
+  "extends": "@repo/typescript-config/react-library",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "src",
+    ".storybook",
+    "tailwind.config.ts",
+    "vitest.config.ts",
+    "vitest.setup.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

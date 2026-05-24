@@ -1,0 +1,37 @@
+{
+  "common": {
+    "appName": "Juris",
+    "loading": "Inapakia",
+    "error": "Hitilafu imetokea",
+    "retry": "Jaribu tena",
+    "save": "Hifadhi",
+    "cancel": "Ghairi",
+    "search": "Tafuta",
+    "settings": "Mipangilio",
+    "logout": "Toka",
+    "theme": "Mandhari",
+    "language": "Lugha"
+  },
+  "nav": {
+    "home": "Nyumbani",
+    "console": "Dashibodi",
+    "admin": "Usimamizi",
+    "billing": "Malipo",
+    "reporting": "Ripoti",
+    "settings": "Mipangilio",
+    "support": "Usaidizi"
+  },
+  "auth": {
+    "login": "Ingia",
+    "logout": "Umetoka",
+    "email": "Barua pepe",
+    "password": "Nenosiri",
+    "forgotPassword": "Umesahau nenosiri",
+    "signIn": "Ingia"
+  },
+  "status": {
+    "healthy": "Nzima",
+    "degraded": "Imepungua",
+    "unavailable": "Haipatikani"
+  }
+}

@@ -1,0 +1,20 @@
+name: Deploy Preview
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+jobs:
+  deploy:
+    if: github.event.pull_request.head.repo.fork == false
+    uses: ./.github/workflows/_cloudflare-deploy.yml
+    with:
+      environment: preview
+      scope: pr-${{ github.event.number }}
+      git_sha: ${{ github.event.pull_request.head.sha }}
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

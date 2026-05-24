@@ -1,0 +1,16 @@
+name: Deploy Production
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/_cloudflare-deploy.yml
+    with:
+      environment: production
+      version: ${{ github.event.release.tag_name }}
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
