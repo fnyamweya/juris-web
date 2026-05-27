@@ -7,6 +7,14 @@ import { resolveRoute } from "./route-map";
 const port = getGatewayPort();
 const clientRoutes = new Map<string, ReturnType<typeof resolveRoute>>();
 
+type ProxySocket = NodeJS.ReadWriteStream & {
+  destroyed?: boolean;
+  writable?: boolean;
+  destroy(error?: Error): void;
+  end(chunk?: string): void;
+  write(chunk: string | Uint8Array): boolean;
+};
+
 function json(
   res: http.ServerResponse,
   statusCode: number,
@@ -53,6 +61,12 @@ function firstHeader(value: string | string[] | undefined): string | undefined {
 
 function headerToString(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value.join(", ") : (value ?? "");
+}
+
+function destroySocket(socket: ProxySocket) {
+  if (!socket.destroyed) {
+    socket.destroy();
+  }
 }
 
 function getPlatformVersion(): string {
@@ -124,6 +138,11 @@ const server = http.createServer((req, res) => {
       },
     },
     (proxyRes) => {
+      proxyRes.on("error", () => {
+        if (!res.destroyed) {
+          res.destroy();
+        }
+      });
       res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
       proxyRes.pipe(res);
     },
@@ -140,15 +159,22 @@ const server = http.createServer((req, res) => {
     });
   });
 
+  req.on("aborted", () => proxyReq.destroy());
+  req.on("error", () => proxyReq.destroy());
+  res.on("error", () => proxyReq.destroy());
   req.pipe(proxyReq);
 });
 
 function writeUpgradeResponse(
-  socket: NodeJS.WritableStream,
+  socket: ProxySocket,
   statusCode: number,
   statusMessage: string,
   headers: http.IncomingHttpHeaders,
 ) {
+  if (socket.destroyed || !socket.writable) {
+    return;
+  }
+
   socket.write(
     [
       `HTTP/1.1 ${statusCode} ${statusMessage}`,
@@ -162,6 +188,7 @@ function writeUpgradeResponse(
 }
 
 server.on("upgrade", (req, socket, head) => {
+  socket.on("error", () => destroySocket(socket));
   const url = new URL(req.url ?? "/", "http://127.0.0.1:" + port);
   const referer = firstHeader(req.headers.referer);
   const route = routeForRequest(
@@ -186,7 +213,14 @@ server.on("upgrade", (req, socket, head) => {
     headers,
   });
 
+  proxyReq.on("socket", (proxySocket: ProxySocket) => {
+    proxySocket.on("error", () => destroySocket(socket));
+    proxySocket.on("close", () => destroySocket(socket));
+    socket.on("close", () => destroySocket(proxySocket));
+  });
+
   proxyReq.on("upgrade", (proxyRes, proxySocket, proxyHead) => {
+    proxySocket.on("error", () => destroySocket(socket));
     writeUpgradeResponse(
       socket,
       proxyRes.statusCode ?? 101,
@@ -207,6 +241,7 @@ server.on("upgrade", (req, socket, head) => {
   });
 
   proxyReq.on("response", (proxyRes) => {
+    proxyRes.on("error", () => destroySocket(socket));
     writeUpgradeResponse(
       socket,
       proxyRes.statusCode ?? 502,
@@ -218,6 +253,15 @@ server.on("upgrade", (req, socket, head) => {
 
   proxyReq.on("error", () => socket.destroy());
   proxyReq.end();
+});
+
+server.on("clientError", (_error, socket) => {
+  if (socket.writable) {
+    socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+    return;
+  }
+
+  socket.destroy();
 });
 
 server.on("error", (error: NodeJS.ErrnoException) => {

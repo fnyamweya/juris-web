@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm dev:check && turbo run dev --parallel --continue",
+    "dev:e2e": "pnpm dev:check && turbo run dev --concurrency=11",
     "dev:check": "tsx tooling/scripts/dev/check-ports.ts",
     "dev:gateway": "pnpm --filter @juris/gateway dev",
     "dev:public": "pnpm --filter @juris/public dev",

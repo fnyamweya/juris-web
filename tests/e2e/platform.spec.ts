@@ -13,7 +13,7 @@ test("login page loads and mock sign in navigates to console", async ({
   await page.getByRole("button", { name: /continue with mock/i }).click();
   await expect(page).toHaveURL(/\/en\/console/);
   await expect(
-    page.getByRole("heading", { name: /customer console/i }),
+    page.getByRole("heading", { name: /console overview/i }),
   ).toBeVisible();
 });
 

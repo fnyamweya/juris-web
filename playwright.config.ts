@@ -12,8 +12,8 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "pnpm dev",
-    url: "http://127.0.0.1:3000/api/health/live",
+    command: "pnpm dev:e2e",
+    url: "http://127.0.0.1:3000/en",
     reuseExistingServer: false,
     timeout: 180_000,
   },
