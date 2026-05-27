@@ -20,8 +20,7 @@ runs:
     - name: Setup pnpm
       shell: bash
       run: |
-        corepack enable
-        corepack prepare pnpm@11.2.2 --activate
+        npm install --global pnpm@11.2.2
         pnpm --version
 
     - name: Resolve pnpm store path
