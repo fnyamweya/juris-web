@@ -21,12 +21,14 @@ Apps never import code from another app. Shared behavior belongs in packages and
 | reporting | 3006 | `/[locale]/reports`                                  |
 | settings  | 3007 | `/[locale]/settings`                                 |
 | support   | 3008 | `/[locale]/support`                                  |
+| docs      | 3009 | `/[locale]/docs`                                     |
 
 ## Local Development
 
 ```bash
 corepack enable
 pnpm install
+pnpm dev:check
 pnpm dev
 ```
 
@@ -36,6 +38,8 @@ Run one app:
 pnpm dev:console
 pnpm dev:billing
 ```
+
+If `pnpm dev` fails immediately, one of the local ports is already occupied. Re-run `pnpm dev:check` to see which service ports need to be freed. You can bypass the preflight once with `SKIP_DEV_PORT_CHECK=1 pnpm dev`.
 
 ## Validation
 
@@ -81,7 +85,7 @@ GitHub environments are structured as:
 - `staging`: deployed manually with the staging workflow
 - `production`: deployed automatically from published GitHub releases
 
-The gateway worker is deployed after the app workers and its service bindings are generated automatically for the matching environment.
+Pull requests and production releases now use affected-app deployment planning so app changes only redeploy the workers they actually impact. After deployment, GitHub Actions runs Cloudflare smoke tests against direct worker health endpoints and the gateway entry point. Preview gateway bindings are merged with already-provisioned preview workers so redeploying app A does not silently disconnect app B.
 
 ## Release Management
 

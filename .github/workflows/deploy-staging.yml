@@ -26,6 +26,7 @@ jobs:
       environment: staging
       scope: staging
       apps: ${{ inputs.apps }}
+      selection_mode: all
       version: ${{ inputs.version }}
       git_sha: ${{ inputs.git_sha }}
     secrets:

@@ -14,13 +14,25 @@ on:
         required: false
         default: ""
         type: string
+      base_ref:
+        required: false
+        default: ""
+        type: string
       version:
+        required: false
+        default: ""
+        type: string
+      head_ref:
         required: false
         default: ""
         type: string
       git_sha:
         required: false
         default: ""
+        type: string
+      selection_mode:
+        required: false
+        default: all
         type: string
     secrets:
       CLOUDFLARE_ACCOUNT_ID:
@@ -40,22 +52,73 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       app_matrix: ${{ steps.app_matrix.outputs.matrix }}
+      apps_csv: ${{ steps.plan.outputs.apps_csv }}
+      gateway_required: ${{ steps.plan.outputs.gateway_required }}
+      has_apps: ${{ steps.plan.outputs.has_apps }}
+      smoke_required: ${{ steps.plan.outputs.smoke_required }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup workspace
         uses: ./.github/actions/setup-monorepo
+
+      - name: Fetch comparison base
+        if: inputs.base_ref != ''
+        shell: bash
+        run: |
+          base_ref="${{ inputs.base_ref }}"
+          if [[ "$base_ref" == origin/* ]]; then
+            git fetch origin "${base_ref#origin/}" --depth=1
+          fi
+
+      - name: Determine deployment plan
+        id: plan
+        shell: bash
+        run: |
+          args=(
+            --environment "${{ inputs.environment }}"
+            --mode "${{ inputs.selection_mode }}"
+          )
+          if [ -n "${{ inputs.apps }}" ]; then
+            args+=(--apps "${{ inputs.apps }}")
+          fi
+          if [ -n "${{ inputs.base_ref }}" ]; then
+            args+=(--base-ref "${{ inputs.base_ref }}")
+          fi
+          if [ -n "${{ inputs.head_ref }}" ]; then
+            args+=(--head-ref "${{ inputs.head_ref }}")
+          fi
+          plan="$(pnpm cloudflare:plan -- "${args[@]}")"
+          plan_file="$(mktemp)"
+          printf '%s' "$plan" > "$plan_file"
+          apps_csv="$(node -e 'const fs = require("node:fs"); const plan = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(plan.apps_csv ?? "");' "$plan_file")"
+          gateway_required="$(node -e 'const fs = require("node:fs"); const plan = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(String(Boolean(plan.gateway_required)));' "$plan_file")"
+          has_apps="$(node -e 'const fs = require("node:fs"); const plan = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(String(Boolean(plan.has_apps)));' "$plan_file")"
+          smoke_required="$(node -e 'const fs = require("node:fs"); const plan = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(String(Boolean(plan.smoke_required)));' "$plan_file")"
+          {
+            echo "apps_csv=$apps_csv"
+            echo "gateway_required=$gateway_required"
+            echo "has_apps=$has_apps"
+            echo "smoke_required=$smoke_required"
+          } >> "$GITHUB_OUTPUT"
+          echo "$plan"
 
       - name: Build deploy matrix
         id: app_matrix
         shell: bash
         run: |
           args=(--group app-workers)
-          if [ -n "${{ inputs.apps }}" ]; then
-            args+=(--apps "${{ inputs.apps }}")
+          if [ "${{ steps.plan.outputs.has_apps }}" = "true" ] && [ -n "${{ steps.plan.outputs.apps_csv }}" ]; then
+            args+=(--apps "${{ steps.plan.outputs.apps_csv }}")
           fi
-          matrix="$(pnpm cloudflare:matrix -- "${args[@]}")"
+          if [ "${{ steps.plan.outputs.has_apps }}" = "true" ]; then
+            matrix="$(pnpm cloudflare:matrix -- "${args[@]}")"
+          else
+            matrix='{"include":[]}'
+          fi
           {
             echo "matrix<<EOF"
             echo "$matrix"
@@ -64,6 +127,7 @@ jobs:
 
   deploy-app-workers:
     needs: discover
+    if: needs.discover.outputs.has_apps == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: ${{ inputs.environment }}
@@ -99,6 +163,10 @@ jobs:
     needs:
       - discover
       - deploy-app-workers
+    if: |
+      always() &&
+      needs.discover.outputs.gateway_required == 'true' &&
+      (needs.deploy-app-workers.result == 'success' || needs.deploy-app-workers.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: ${{ inputs.environment }}
@@ -116,6 +184,9 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           args=(--environment "${{ inputs.environment }}" --app gateway)
+          if [ -n "${{ needs.discover.outputs.apps_csv }}" ]; then
+            args+=(--bind-apps "${{ needs.discover.outputs.apps_csv }}")
+          fi
           if [ -n "${{ inputs.scope }}" ]; then
             args+=(--scope "${{ inputs.scope }}")
           fi
@@ -126,3 +197,48 @@ jobs:
             args+=(--git-sha "${{ inputs.git_sha }}")
           fi
           pnpm cloudflare:deploy -- "${args[@]}"
+
+  smoke-test:
+    needs:
+      - discover
+      - deploy-app-workers
+      - deploy-gateway
+    if: |
+      always() &&
+      needs.discover.outputs.smoke_required == 'true' &&
+      (needs.deploy-app-workers.result == 'success' || needs.deploy-app-workers.result == 'skipped') &&
+      (needs.deploy-gateway.result == 'success' || needs.deploy-gateway.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-monorepo
+
+      - name: Run Cloudflare smoke tests
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          args=(--environment "${{ inputs.environment }}")
+          if [ -n "${{ inputs.scope }}" ]; then
+            args+=(--scope "${{ inputs.scope }}")
+          fi
+          if [ -n "${{ needs.discover.outputs.apps_csv }}" ]; then
+            args+=(--apps "${{ needs.discover.outputs.apps_csv }}")
+            args+=(--expect-gateway-routes)
+          fi
+          if [ "${{ needs.discover.outputs.gateway_required }}" = "true" ]; then
+            args+=(--expect-gateway)
+          fi
+          if [ -n "${{ inputs.version }}" ]; then
+            args+=(--version "${{ inputs.version }}")
+          fi
+          if [ -n "${{ inputs.git_sha }}" ]; then
+            args+=(--git-sha "${{ inputs.git_sha }}")
+          fi
+          pnpm cloudflare:smoke -- "${args[@]}"

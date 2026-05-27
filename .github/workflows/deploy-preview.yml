@@ -13,6 +13,9 @@ jobs:
     uses: ./.github/workflows/_cloudflare-deploy.yml
     with:
       environment: preview
+      base_ref: origin/${{ github.base_ref }}
+      head_ref: ${{ github.event.pull_request.head.sha }}
+      selection_mode: affected
       scope: pr-${{ github.event.number }}
       git_sha: ${{ github.event.pull_request.head.sha }}
     secrets:

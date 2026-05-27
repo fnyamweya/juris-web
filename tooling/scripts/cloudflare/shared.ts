@@ -63,9 +63,34 @@ export type DeploymentContext = {
   buildTime: string;
 };
 
+type MaterializeOptions = {
+  serviceApps?: DeployableApp[];
+};
+
 type CommandOptions = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+};
+
+type CloudflareApiEnvelope<T> = {
+  errors?: Array<{
+    message?: string;
+  }>;
+  result: T;
+  success: boolean;
+};
+
+type CloudflareWorkersSubdomainResult = {
+  subdomain?: string;
+};
+
+type CloudflareWorkerSubdomainState = {
+  enabled: boolean;
+  previews_enabled: boolean;
+};
+
+type CloudflareWorkerSummary = {
+  id?: string;
 };
 
 const defaultNextWranglerConfig: WranglerConfig = {
@@ -281,9 +306,128 @@ export function assertCloudflareCredentials() {
   }
 }
 
+export async function cloudflareApiRequest<T>(
+  resourcePath: string,
+  options: {
+    body?: unknown;
+    method?: string;
+  } = {},
+): Promise<T> {
+  assertCloudflareCredentials();
+
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4${resourcePath}`,
+    {
+      method: options.method ?? "GET",
+      headers: {
+        Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN ?? ""}`,
+        ...(options.body ? { "content-type": "application/json" } : {}),
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    },
+  );
+
+  const payload = (await response.json()) as CloudflareApiEnvelope<T>;
+  if (!response.ok || !payload.success) {
+    const detail =
+      payload.errors
+        ?.map((error) => error.message)
+        .filter(Boolean)
+        .join("; ") ?? response.statusText;
+    throw new Error(
+      `Cloudflare API request failed (${response.status}): ${detail || "unknown error"}`,
+    );
+  }
+
+  return payload.result;
+}
+
+export async function getWorkersDevSubdomain(): Promise<string> {
+  const result = await cloudflareApiRequest<CloudflareWorkersSubdomainResult>(
+    `/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID ?? ""}/workers/subdomain`,
+  );
+
+  if (!result.subdomain) {
+    throw new Error(
+      "Cloudflare Workers account subdomain is not configured for this account",
+    );
+  }
+
+  return result.subdomain;
+}
+
+export async function getWorkerSubdomainState(
+  workerName: string,
+): Promise<CloudflareWorkerSubdomainState> {
+  return cloudflareApiRequest<CloudflareWorkerSubdomainState>(
+    `/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID ?? ""}/workers/scripts/${workerName}/subdomain`,
+  );
+}
+
+export async function ensureWorkerSubdomainEnabled(workerName: string) {
+  let attemptsRemaining = 5;
+  let lastError: unknown;
+
+  while (attemptsRemaining > 0) {
+    try {
+      const state = await getWorkerSubdomainState(workerName);
+      if (state.enabled) {
+        return;
+      }
+
+      await cloudflareApiRequest<CloudflareWorkerSubdomainState>(
+        `/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID ?? ""}/workers/scripts/${workerName}/subdomain`,
+        {
+          body: {
+            enabled: true,
+          },
+          method: "POST",
+        },
+      );
+      return;
+    } catch (error) {
+      lastError = error;
+      attemptsRemaining -= 1;
+      if (attemptsRemaining === 0) {
+        break;
+      }
+
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 2_000);
+      });
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+
+  throw new Error(`Unable to enable workers.dev subdomain for ${workerName}`);
+}
+
+export async function listWorkerScriptNames(): Promise<string[]> {
+  const result = await cloudflareApiRequest<CloudflareWorkerSummary[]>(
+    `/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID ?? ""}/workers/scripts`,
+  );
+  return result
+    .map((worker) => worker.id?.trim())
+    .filter((workerName): workerName is string => Boolean(workerName));
+}
+
+export async function listExistingScopedApps(
+  environment: DeploymentEnvironment,
+  scope?: string,
+): Promise<DeployableApp[]> {
+  const workerNames = new Set(await listWorkerScriptNames());
+  return listDeployableApps()
+    .filter((app) => app.kind !== "gateway")
+    .filter((app) => workerNames.has(getWorkerName(app, environment, scope)));
+}
+
 export async function materializeWranglerConfig(
   app: DeployableApp,
   context: DeploymentContext,
+  options: MaterializeOptions = {},
 ): Promise<string> {
   const targetDirectory = path.join(
     workspaceRoot,
@@ -294,7 +438,7 @@ export async function materializeWranglerConfig(
   );
   await mkdir(targetDirectory, { recursive: true });
 
-  const config = createWranglerConfig(app, context);
+  const config = createWranglerConfig(app, context, options.serviceApps);
   const targetPath = path.join(targetDirectory, `${app.slug}.wrangler.jsonc`);
   await writeFile(targetPath, `${JSON.stringify(config, null, 2)}\n`);
 
@@ -371,6 +515,7 @@ export async function runCommandCapture(
 function createWranglerConfig(
   app: DeployableApp,
   context: DeploymentContext,
+  serviceApps?: DeployableApp[],
 ): WranglerConfig {
   const baseConfig = readWranglerConfig(app.wranglerPath, app.kind, app.slug);
   const config: WranglerConfig = {
@@ -389,16 +534,24 @@ function createWranglerConfig(
   };
 
   if (app.kind === "gateway") {
-    config.services = routeMap.map((route) => ({
-      binding: route.binding,
-      service: getWorkerName(
-        {
-          baseWorkerName: getBaseWorkerNameForRoute(route),
-        },
-        context.environment,
-        context.scope,
-      ),
-    }));
+    const boundApps =
+      serviceApps?.filter((candidate) => candidate.kind !== "gateway") ??
+      listDeployableApps().filter((candidate) => candidate.kind !== "gateway");
+
+    config.services = routeMap
+      .filter((route) =>
+        boundApps.some((candidate) => candidate.slug === route.name),
+      )
+      .map((route) => ({
+        binding: route.binding,
+        service: getWorkerName(
+          {
+            baseWorkerName: getBaseWorkerNameForRoute(route),
+          },
+          context.environment,
+          context.scope,
+        ),
+      }));
   }
 
   if (baseConfig.assets) {

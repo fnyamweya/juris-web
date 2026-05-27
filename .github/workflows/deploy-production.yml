@@ -6,10 +6,42 @@ on:
       - published
 
 jobs:
+  resolve-release-range:
+    runs-on: ubuntu-latest
+    outputs:
+      base_ref: ${{ steps.range.outputs.base_ref }}
+      head_ref: ${{ steps.range.outputs.head_ref }}
+      selection_mode: ${{ steps.range.outputs.selection_mode }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve affected release range
+        id: range
+        shell: bash
+        run: |
+          current_tag="${{ github.event.release.tag_name }}"
+          previous_tag="$(git tag --sort=-v:refname | grep -Fxv "$current_tag" | head -n 1 || true)"
+          if [ -n "$previous_tag" ]; then
+            echo "base_ref=$previous_tag" >> "$GITHUB_OUTPUT"
+            echo "head_ref=$current_tag" >> "$GITHUB_OUTPUT"
+            echo "selection_mode=affected" >> "$GITHUB_OUTPUT"
+          else
+            echo "base_ref=" >> "$GITHUB_OUTPUT"
+            echo "head_ref=" >> "$GITHUB_OUTPUT"
+            echo "selection_mode=all" >> "$GITHUB_OUTPUT"
+          fi
+
   deploy:
+    needs: resolve-release-range
     uses: ./.github/workflows/_cloudflare-deploy.yml
     with:
       environment: production
+      base_ref: ${{ needs.resolve-release-range.outputs.base_ref }}
+      head_ref: ${{ needs.resolve-release-range.outputs.head_ref }}
+      selection_mode: ${{ needs.resolve-release-range.outputs.selection_mode }}
       version: ${{ github.event.release.tag_name }}
     secrets:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

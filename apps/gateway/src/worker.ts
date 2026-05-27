@@ -8,6 +8,7 @@ type ServiceBinding = {
 type GatewayEnv = Partial<Record<GatewayRoute["binding"], ServiceBinding>> & {
   BUILD_TIME?: string;
   GIT_SHA?: string;
+  PLATFORM_VERSION?: string;
 };
 
 function json(body: unknown, init?: ResponseInit): Response {
@@ -20,6 +21,10 @@ function json(body: unknown, init?: ResponseInit): Response {
   });
 }
 
+function getPlatformVersion(env: GatewayEnv): string {
+  return env.PLATFORM_VERSION ?? packageMetadata.version;
+}
+
 export default {
   async fetch(request: Request, env: GatewayEnv): Promise<Response> {
     const url = new URL(request.url);
@@ -28,7 +33,7 @@ export default {
       return json({
         status: "healthy",
         service: "juris-gateway",
-        version: packageMetadata.version,
+        version: getPlatformVersion(env),
         timestamp: new Date().toISOString(),
       });
     }
@@ -36,7 +41,7 @@ export default {
     if (url.pathname === "/api/health/version") {
       return json({
         name: "gateway",
-        version: packageMetadata.version,
+        version: getPlatformVersion(env),
         gitSha: env.GIT_SHA ?? "local",
         buildTime: env.BUILD_TIME ?? new Date().toISOString(),
         runtime: "cloudflare-workers",

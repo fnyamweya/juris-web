@@ -1,7 +1,10 @@
 import {
   assertCloudflareCredentials,
   createDeploymentContext,
+  ensureWorkerSubdomainEnabled,
   getCommandEnvironment,
+  getWorkerName,
+  listExistingScopedApps,
   listDeployableApps,
   materializeWranglerConfig,
   runCommand,
@@ -17,6 +20,7 @@ type CliOptions = {
   version?: string;
   gitSha?: string;
   buildTime?: string;
+  bindApps?: string[];
   skipBuild: boolean;
 };
 
@@ -40,14 +44,66 @@ async function main() {
       `\nDeploying ${app.slug} to ${context.environment} (${context.version})`,
     );
 
-    const wranglerConfigPath = await materializeWranglerConfig(app, context);
+    const wranglerConfigPath = await materializeWranglerConfig(app, context, {
+      serviceApps: await resolveGatewayServiceApps(
+        app,
+        availableApps,
+        context,
+        options.bindApps,
+      ),
+    });
 
     if (!options.skipBuild) {
       await buildApp(app, env);
     }
 
     await deployApp(app, wranglerConfigPath, env);
+    await ensureWorkerSubdomainEnabled(
+      getWorkerName(app, context.environment, context.scope),
+    );
   }
+}
+
+async function resolveGatewayServiceApps(
+  app: DeployableApp,
+  availableApps: DeployableApp[],
+  context: {
+    environment: DeploymentEnvironment;
+    scope?: string;
+  },
+  bindApps: string[] | undefined,
+) {
+  if (app.kind !== "gateway") {
+    return undefined;
+  }
+
+  const deployableWorkers = availableApps.filter(
+    (candidate) => candidate.kind !== "gateway",
+  );
+
+  if (context.environment !== "preview") {
+    return deployableWorkers;
+  }
+
+  const explicitlyBoundApps =
+    bindApps && bindApps.length > 0
+      ? selectApps(deployableWorkers, bindApps).filter(
+          (candidate) => candidate.kind !== "gateway",
+        )
+      : [];
+  const existingPreviewApps = await listExistingScopedApps(
+    context.environment,
+    context.scope,
+  );
+  const mergedApps = new Map<string, DeployableApp>();
+
+  for (const candidate of [...existingPreviewApps, ...explicitlyBoundApps]) {
+    mergedApps.set(candidate.slug, candidate);
+  }
+
+  return [...mergedApps.values()].sort((left, right) =>
+    left.slug.localeCompare(right.slug),
+  );
 }
 
 async function buildApp(app: DeployableApp, env: NodeJS.ProcessEnv) {
@@ -103,6 +159,8 @@ function parseArgs(argv: string[]): CliOptions {
     const next = argv[index + 1];
 
     switch (arg) {
+      case "--":
+        break;
       case "--apps":
       case "--app":
         options.apps = parseList(requireValue(arg, next));
@@ -126,6 +184,10 @@ function parseArgs(argv: string[]): CliOptions {
         break;
       case "--build-time":
         options.buildTime = requireValue(arg, next);
+        index += 1;
+        break;
+      case "--bind-apps":
+        options.bindApps = parseList(requireValue(arg, next));
         index += 1;
         break;
       case "--skip-build":

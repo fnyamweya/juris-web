@@ -8,7 +8,8 @@
     "node": ">=20.18.0"
   },
   "scripts": {
-    "dev": "turbo run dev --parallel --continue",
+    "dev": "pnpm dev:check && turbo run dev --parallel --continue",
+    "dev:check": "tsx tooling/scripts/dev/check-ports.ts",
     "dev:gateway": "pnpm --filter @juris/gateway dev",
     "dev:public": "pnpm --filter @juris/public dev",
     "dev:identity": "pnpm --filter @juris/identity dev",
@@ -35,9 +36,11 @@
     "release:version": "tsx tooling/scripts/release/version.ts",
     "release:notes": "tsx tooling/scripts/release/print-latest-changelog.ts",
     "cloudflare:matrix": "tsx tooling/scripts/cloudflare/print-matrix.ts",
+    "cloudflare:plan": "tsx tooling/scripts/cloudflare/plan.ts",
     "cloudflare:validate": "tsx tooling/scripts/cloudflare/validate.ts",
     "cloudflare:deploy": "tsx tooling/scripts/cloudflare/deploy.ts",
     "cloudflare:destroy": "tsx tooling/scripts/cloudflare/destroy.ts",
+    "cloudflare:smoke": "tsx tooling/scripts/cloudflare/smoke-test.ts",
     "analyze": "ANALYZE=true turbo run build --concurrency=2",
     "bootstrap": "tsx tooling/scripts/bootstrap.ts",
     "codehawk": "tsx tooling/scripts/codehawk.ts",

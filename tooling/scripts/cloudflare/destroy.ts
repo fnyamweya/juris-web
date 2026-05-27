@@ -73,6 +73,8 @@ function parseArgs(argv: string[]): CliOptions {
     const next = argv[index + 1];
 
     switch (arg) {
+      case "--":
+        break;
       case "--apps":
       case "--app":
         options.apps = requireValue(arg, next)
