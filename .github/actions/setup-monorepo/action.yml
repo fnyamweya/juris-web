@@ -16,8 +16,6 @@ runs:
       uses: actions/setup-node@v6
       with:
         node-version: ${{ inputs.node-version }}
-        cache: pnpm
-        cache-dependency-path: pnpm-lock.yaml
 
     - name: Setup pnpm
       shell: bash
@@ -25,6 +23,20 @@ runs:
         corepack enable
         corepack prepare pnpm@11.2.2 --activate
         pnpm --version
+
+    - name: Resolve pnpm store path
+      id: pnpm-store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore pnpm store
+      if: inputs.install == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: ${{ runner.os }}-node-${{ inputs.node-version }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-node-${{ inputs.node-version }}-pnpm-
 
     - name: Install dependencies
       if: inputs.install == 'true'
