@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@11.2.2",
   "engines": {
-    "node": ">=20.18.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "dev": "pnpm dev:check && turbo run dev --parallel --continue",

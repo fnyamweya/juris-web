@@ -4,7 +4,7 @@ description: Install pnpm, set up Node.js, and restore workspace dependencies
 inputs:
   node-version:
     description: Node.js version to use
-    default: "20.18.0"
+    default: "22.13.0"
   install:
     description: Whether to install dependencies
     default: "true"
@@ -12,18 +12,18 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v4
-      with:
-        version: 11.2.2
-        run_install: false
-
     - name: Setup Node.js
       uses: actions/setup-node@v6
       with:
         node-version: ${{ inputs.node-version }}
         cache: pnpm
         cache-dependency-path: pnpm-lock.yaml
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 11.2.2
+        run_install: false
 
     - name: Install dependencies
       if: inputs.install == 'true'

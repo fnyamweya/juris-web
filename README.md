@@ -25,6 +25,8 @@ Apps never import code from another app. Shared behavior belongs in packages and
 
 ## Local Development
 
+Use Node.js 22.13.0 or newer. `.nvmrc` is pinned to the CI baseline.
+
 ```bash
 corepack enable
 pnpm install
