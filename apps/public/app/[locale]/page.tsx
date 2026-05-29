@@ -1,5 +1,4 @@
-import { createTranslator } from "next-intl";
-import { getMessages } from "@repo/i18n";
+import { getTranslations } from "next-intl/server";
 import type { Locale } from "@repo/i18n";
 import {
   Button,
@@ -26,8 +25,7 @@ export default async function PublicHomePage({
   params: Promise<{ locale: Locale }>;
 }) {
   const { locale } = await params;
-  const messages = await getMessages(locale);
-  const t = createTranslator({ locale, messages });
+  const t = await getTranslations();
 
   return (
     <main className="min-h-screen">

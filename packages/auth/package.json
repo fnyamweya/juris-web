@@ -17,6 +17,8 @@
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*"
+    "@repo/platform": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "next": "15.5.18"
   }
 }

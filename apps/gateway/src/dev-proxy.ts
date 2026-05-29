@@ -134,6 +134,10 @@ const server = http.createServer((req, res) => {
       headers: {
         ...req.headers,
         host: upstream.host,
+        // Preserve the public-facing host so Next.js server action CSRF checks
+        // compare origin against the gateway host, not the upstream app host.
+        "x-forwarded-host": req.headers.host ?? "",
+        "x-forwarded-proto": "http",
         "x-juris-gateway": "local",
       },
     },
@@ -206,6 +210,8 @@ server.on("upgrade", (req, socket, head) => {
   const headers = {
     ...req.headers,
     host: upstream.host,
+    "x-forwarded-host": req.headers.host ?? "",
+    "x-forwarded-proto": "http",
     "x-juris-gateway": "local",
   };
   const proxyReq = http.request(upstream, {

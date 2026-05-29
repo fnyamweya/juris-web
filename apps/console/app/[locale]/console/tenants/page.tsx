@@ -1,4 +1,6 @@
 import type { Locale } from "@repo/i18n";
+import { createCivisClient, CivisApiError } from "@repo/civis";
+import type { Tenant } from "@repo/civis";
 import {
   Button,
   Card,
@@ -8,62 +10,26 @@ import {
   CardTitle,
   DataTable,
   MetricCard,
+  StatusBadge,
 } from "@repo/ui";
 import { ConsolePageShell } from "@/components/console-page-shell";
 
-const tenantMetrics = [
-  {
-    title: "Total tenants",
-    value: "128",
-    change: "+5 this week",
-    trend: "up" as const,
-  },
-  {
-    title: "Pending onboarding",
-    value: "9",
-    change: "2 waiting review",
-    trend: "flat" as const,
-  },
-  {
-    title: "Suspended",
-    value: "3",
-    change: "No new suspensions",
-    trend: "down" as const,
-  },
-  {
-    title: "SLA risk",
-    value: "4",
-    change: "2 above threshold",
-    trend: "up" as const,
-  },
-];
+async function fetchTenants(): Promise<Tenant[]> {
+  try {
+    const client = await createCivisClient();
+    const page = await client.tenants.list({ limit: 100 });
+    return page.data;
+  } catch (err) {
+    if (err instanceof CivisApiError && err.isUnauthorized) throw err;
+    return [];
+  }
+}
 
-const tenantRows = [
-  {
-    Tenant: "Acme Legal Group",
-    Region: "US-East",
-    Plan: "Enterprise",
-    Status: "Active",
-  },
-  {
-    Tenant: "Kilimani Chambers",
-    Region: "Africa",
-    Plan: "Growth",
-    Status: "Active",
-  },
-  {
-    Tenant: "Nova Compliance",
-    Region: "EU-West",
-    Plan: "Starter",
-    Status: "Pending",
-  },
-  {
-    Tenant: "Juris Labs",
-    Region: "US-West",
-    Plan: "Enterprise",
-    Status: "Active",
-  },
-];
+function statusVariant(s: Tenant["status"]): "active" | "pending" | "inactive" {
+  if (s === "ACTIVE") return "active";
+  if (s === "SUSPENDED") return "pending";
+  return "inactive";
+}
 
 export default async function ConsoleTenantsPage({
   params,
@@ -71,6 +37,20 @@ export default async function ConsoleTenantsPage({
   params: Promise<{ locale: Locale }>;
 }) {
   const { locale } = await params;
+  const tenants = await fetchTenants();
+
+  const active = tenants.filter((t) => t.status === "ACTIVE").length;
+  const suspended = tenants.filter((t) => t.status === "SUSPENDED").length;
+  const pending = tenants.filter(
+    (t) => t.status === "PENDING" || t.status === "ARCHIVED",
+  ).length;
+
+  const metrics = [
+    { title: "Total tenants", value: String(tenants.length), trend: "flat" as const },
+    { title: "Active", value: String(active), trend: "up" as const },
+    { title: "Suspended", value: String(suspended), trend: "down" as const },
+    { title: "Pending / archived", value: String(pending), trend: "flat" as const },
+  ];
 
   return (
     <ConsolePageShell
@@ -81,22 +61,28 @@ export default async function ConsoleTenantsPage({
       action={<Button>Invite tenant</Button>}
     >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {tenantMetrics.map((metric) => (
-          <MetricCard key={metric.title} {...metric} />
+        {metrics.map((m) => (
+          <MetricCard key={m.title} {...m} />
         ))}
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Current tenants</CardTitle>
+          <CardTitle>Tenants ({tenants.length})</CardTitle>
           <CardDescription>
             Internal registry with current plan and health status.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <DataTable
-            columns={["Tenant", "Region", "Plan", "Status"]}
-            rows={tenantRows}
+            columns={["Tenant", "Slug", "Plan", "Region", "Status"]}
+            rows={tenants.map((t) => ({
+              Tenant: t.displayName,
+              Slug: t.slug,
+              Plan: t.plan,
+              Region: t.region,
+              Status: <StatusBadge status={statusVariant(t.status)} />,
+            }))}
           />
         </CardContent>
       </Card>

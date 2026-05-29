@@ -1,7 +1,7 @@
 import { createTranslator } from "next-intl";
 import { formatDate, getMessages } from "@repo/i18n";
 import type { Locale } from "@repo/i18n";
-import { getMockSession } from "@repo/auth";
+import { getSession } from "@repo/auth";
 import {
   AppShell,
   Breadcrumb,
@@ -74,7 +74,7 @@ export default async function ProductPage({
   const { locale } = await params;
   const messages = await getMessages(locale);
   const t = createTranslator({ locale, messages });
-  const session = await getMockSession();
+  const session = await getSession();
   const navItems = getNavItems(locale);
 
   return (
@@ -86,10 +86,11 @@ export default async function ProductPage({
       tenants={session.availableTenants}
       locale={locale}
       session={session}
+      logoutUrl={`/api/auth/logout?locale=${locale}`}
       breadcrumb={getBreadcrumb(locale, "Reporting")}
     >
       <PermissionGate
-        session={session}
+        session={session}`}
         permission="reporting:read"
         fallback={
           <EmptyState

@@ -1,61 +1,55 @@
 import type { Locale } from "@repo/i18n";
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  LocaleSwitcher,
-  ThemeToggle,
-} from "@repo/ui";
 
-export default async function IdentityPage({
+export default async function LogoutPage({
   params,
 }: {
   params: Promise<{ locale: Locale }>;
 }) {
   const { locale } = await params;
+
   return (
-    <main className="grid min-h-screen bg-muted/30 lg:grid-cols-[0.9fr_1.1fr]">
-      <section className="hidden border-r bg-card p-10 lg:flex lg:flex-col lg:justify-between">
-        <a href={"/" + locale} className="text-lg font-semibold">
-          Juris
-        </a>
-        <div>
-          <h1 className="text-4xl font-semibold tracking-normal">
-            Identity fabric for enterprise teams.
-          </h1>
-          <p className="mt-4 text-muted-foreground">
-            Mock authentication keeps local development fast while contracts
-            remain ready for OIDC and SAML providers.
+    <main className="flex min-h-dvh flex-col items-center justify-center bg-background px-5">
+      <div className="w-full max-w-sm space-y-6 text-center">
+
+        {/* Icon */}
+        <div className="mx-auto grid size-14 place-items-center rounded-2xl border border-border/60 bg-muted/40">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="size-7 text-muted-foreground"
+            aria-hidden="true"
+          >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </div>
+
+        {/* Message */}
+        <div className="space-y-2">
+          <h1 className="text-xl font-semibold tracking-tight">You're signed out</h1>
+          <p className="text-sm text-muted-foreground">
+            Your session has ended and all tokens have been revoked.
           </p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Protected by secure headers and typed session boundaries.
+
+        {/* Action */}
+        <a
+          href={`/${locale}/login`}
+          className="inline-flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/85"
+        >
+          Sign in again
+        </a>
+
+        <p className="text-xs text-muted-foreground/60">
+          Secured by Civis
         </p>
-      </section>
-      <section className="flex flex-col">
-        <header className="flex justify-end gap-2 p-4">
-          <LocaleSwitcher locale={locale} />
-          <ThemeToggle />
-        </header>
-        <div className="flex flex-1 items-center justify-center p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle>Signed out</CardTitle>
-              <CardDescription>
-                Your local mock session has been cleared for this browser.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild className="w-full">
-                <a href={"/" + locale + "/login"}>Return to sign in</a>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
+      </div>
     </main>
   );
 }

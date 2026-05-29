@@ -1747,9 +1747,11 @@ export function TenantSwitcher({
 export function UserMenu({
   user,
   basePath = "/dashboard",
+  logoutUrl,
 }: {
   user?: User | undefined;
   basePath?: string;
+  logoutUrl?: string | undefined;
 }) {
   const initials = useMemo(
     () =>
@@ -1837,9 +1839,11 @@ export function UserMenu({
           </a>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          <LogOut className="mr-2 h-4 w-4" />
-          Log out
+        <DropdownMenuItem asChild>
+          <a href={logoutUrl ?? "/api/auth/logout"}>
+            <LogOut className="mr-2 h-4 w-4" />
+            Log out
+          </a>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1850,13 +1854,15 @@ export function SidebarUserMenu({
   user,
   collapsed = false,
   basePath = "/dashboard",
+  logoutUrl,
 }: {
   user?: User | undefined;
   collapsed?: boolean;
   basePath?: string;
+  logoutUrl?: string | undefined;
 }) {
   if (!collapsed) {
-    return <UserMenu user={user} basePath={basePath} />;
+    return <UserMenu user={user} basePath={basePath} logoutUrl={logoutUrl} />;
   }
 
   const initials = (user?.name ?? "User")
@@ -1917,9 +1923,11 @@ export function SidebarUserMenu({
           </a>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          <LogOut className="mr-2 h-4 w-4" />
-          Log out
+        <DropdownMenuItem asChild>
+          <a href={logoutUrl ?? "/api/auth/logout"}>
+            <LogOut className="mr-2 h-4 w-4" />
+            Log out
+          </a>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1971,6 +1979,7 @@ function AppSidebar({
   variant,
   basePath,
   currentPath,
+  logoutUrl,
   onNavigate,
 }: {
   navItems: NavItem[];
@@ -1982,6 +1991,7 @@ function AppSidebar({
   variant: SidebarVariant;
   basePath: string;
   currentPath: string;
+  logoutUrl?: string | undefined;
   onNavigate?: (() => void) | undefined;
 }) {
   return (
@@ -2019,6 +2029,7 @@ function AppSidebar({
           user={user}
           collapsed={collapsed}
           basePath={basePath}
+          logoutUrl={logoutUrl}
         />
       </div>
     </div>
@@ -2150,6 +2161,7 @@ export function AppShell({
   locale,
   session,
   breadcrumb,
+  logoutUrl,
   children,
 }: {
   appName: string;
@@ -2161,6 +2173,7 @@ export function AppShell({
   locale: Locale;
   session?: Session | undefined;
   breadcrumb?: ReactNode;
+  logoutUrl?: string | undefined;
   children: ReactNode;
 }) {
   const currentPath = useCurrentPath();
@@ -2228,6 +2241,7 @@ export function AppShell({
       variant={sidebarVariant}
       basePath={basePath}
       currentPath={currentPath}
+      logoutUrl={logoutUrl}
       onNavigate={onNavigate}
     />
   );

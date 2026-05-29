@@ -1,6 +1,6 @@
 import type { Locale } from "@repo/i18n";
 import { getMessages } from "@repo/i18n";
-import { getMockSession } from "@repo/auth";
+import { getSession } from "@repo/auth";
 import {
   AppShell,
   Breadcrumb,
@@ -35,7 +35,7 @@ export default async function DocsPage({
   const { locale } = await params;
   const messages = await getMessages(locale);
   const t = createTranslator({ locale, messages });
-  const session = await getMockSession();
+  const session = await getSession();
 
   return (
     <AppShell
@@ -46,6 +46,7 @@ export default async function DocsPage({
       tenants={session.availableTenants}
       locale={locale}
       session={session}
+      logoutUrl={`/api/auth/logout?locale=${locale}`}
       breadcrumb={
         <Breadcrumb
           items={[{ label: "Juris", href: "/" + locale }, { label: "Docs" }]}
@@ -53,7 +54,7 @@ export default async function DocsPage({
       }
     >
       <PermissionGate
-        session={session}
+        session={session}`}
         permission="docs:read"
         fallback={
           <EmptyState

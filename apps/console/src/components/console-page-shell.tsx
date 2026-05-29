@@ -1,4 +1,4 @@
-import { getMockSession } from "@repo/auth";
+import { getSession } from "@repo/auth";
 import type { Locale } from "@repo/i18n";
 import { AppShell, EmptyState, PageHeader, type StateAction } from "@repo/ui";
 import { PermissionGate } from "@repo/ui/permission-gate";
@@ -26,7 +26,7 @@ export async function ConsolePageShell({
   deniedAction,
   children,
 }: ConsolePageShellProps) {
-  const session = await getMockSession();
+  const session = await getSession();
 
   return (
     <AppShell
@@ -39,6 +39,7 @@ export async function ConsolePageShell({
       locale={locale}
       session={session}
       breadcrumb={getConsoleBreadcrumb(locale, breadcrumbLabel)}
+      logoutUrl={`/api/auth/logout?locale=${locale}`}
     >
       <PermissionGate
         session={session}
