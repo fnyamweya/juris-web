@@ -8,14 +8,22 @@ type CivisResponse<T> = {
 
 type CivisListResponse<T> = {
   data: T[];
-  meta: {
+  meta?: {
     limit: number;
     nextCursor: string | null;
     hasMore: boolean;
     total?: number;
   };
+  pagination?: {
+    limit: number;
+    nextCursor: string | null;
+    hasNext: boolean;
+    total?: number;
+  };
   request?: { requestId: string; correlationId: string };
 };
+
+type EmptySuccess = null;
 
 export type HttpConfig = {
   baseUrl: string;
@@ -36,6 +44,21 @@ async function parseError(res: Response): Promise<CivisApiError> {
   });
 }
 
+async function parseResponse<T>(
+  res: Response,
+): Promise<CivisResponse<T> | EmptySuccess> {
+  if (res.status === 204) return null;
+
+  const text = await res.text();
+  if (!text.trim()) return null;
+
+  const payload = JSON.parse(text) as CivisResponse<T> | T;
+  if (payload && typeof payload === "object" && "data" in payload) {
+    return payload as CivisResponse<T>;
+  }
+  return { data: payload as T };
+}
+
 export function createHttp(config: HttpConfig) {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${config.accessToken}`,
@@ -46,67 +69,113 @@ export function createHttp(config: HttpConfig) {
     headers["X-Civis-Tenant-Id"] = config.tenantId;
   }
 
-  async function get<T>(path: string, params?: Record<string, string | number | undefined>): Promise<CivisResponse<T>> {
+  function buildUrl(
+    path: string,
+    params?: Record<string, boolean | string | number | undefined>,
+  ) {
     const url = new URL(`${config.baseUrl}${path}`);
     if (params) {
       for (const [k, v] of Object.entries(params)) {
         if (v !== undefined) url.searchParams.set(k, String(v));
       }
     }
-    const res = await fetch(url.toString(), { headers });
-    if (!res.ok) throw await parseError(res);
-    return res.json() as Promise<CivisResponse<T>>;
+    return url.toString();
   }
 
-  async function list<T>(path: string, params?: Record<string, string | number | undefined>): Promise<CivisListResponse<T>> {
-    const url = new URL(`${config.baseUrl}${path}`);
-    if (params) {
-      for (const [k, v] of Object.entries(params)) {
-        if (v !== undefined) url.searchParams.set(k, String(v));
-      }
+  async function get<T>(
+    path: string,
+    params?: Record<string, boolean | string | number | undefined>,
+  ): Promise<CivisResponse<T>> {
+    const res = await fetch(buildUrl(path, params), { headers });
+    if (!res.ok) throw await parseError(res);
+    const body = (await res.json()) as CivisResponse<T> | T;
+    if (body && typeof body === "object" && "data" in body) {
+      return body as CivisResponse<T>;
     }
-    const res = await fetch(url.toString(), { headers });
-    if (!res.ok) throw await parseError(res);
-    return res.json() as Promise<CivisListResponse<T>>;
+    return { data: body as T };
   }
 
-  async function post<T>(path: string, body?: unknown): Promise<CivisResponse<T> | null> {
+  async function list<T>(
+    path: string,
+    params?: Record<string, boolean | string | number | undefined>,
+  ): Promise<Required<Pick<CivisListResponse<T>, "data" | "meta">>> {
+    const res = await fetch(buildUrl(path, params), { headers });
+    if (!res.ok) throw await parseError(res);
+    const body = (await res.json()) as CivisListResponse<T> | T[];
+    if (Array.isArray(body)) {
+      return {
+        data: body,
+        meta: {
+          limit: body.length,
+          nextCursor: null,
+          hasMore: false,
+        },
+      };
+    }
+    const meta = body.meta ?? {
+      limit: body.pagination?.limit ?? body.data.length,
+      nextCursor: body.pagination?.nextCursor ?? null,
+      hasMore: body.pagination?.hasNext ?? false,
+      ...(body.pagination?.total !== undefined
+        ? { total: body.pagination.total }
+        : {}),
+    };
+    return { data: body.data, meta };
+  }
+
+  async function post<T>(
+    path: string,
+    body?: unknown,
+  ): Promise<CivisResponse<T> | null> {
     const res = await fetch(`${config.baseUrl}${path}`, {
       method: "POST",
       headers,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
-    if (res.status === 204) return null;
     if (!res.ok) throw await parseError(res);
-    return res.json() as Promise<CivisResponse<T>>;
+    return parseResponse<T>(res);
   }
 
-  async function put<T>(path: string, body?: unknown): Promise<CivisResponse<T>> {
+  async function put<T>(
+    path: string,
+    body?: unknown,
+  ): Promise<CivisResponse<T>> {
     const res = await fetch(`${config.baseUrl}${path}`, {
       method: "PUT",
       headers,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
     if (!res.ok) throw await parseError(res);
-    return res.json() as Promise<CivisResponse<T>>;
+    const payload = await parseResponse<T>(res);
+    return payload ?? { data: undefined as T };
   }
 
-  async function patch<T>(path: string, body?: unknown): Promise<CivisResponse<T>> {
+  async function patch<T>(
+    path: string,
+    body?: unknown,
+  ): Promise<CivisResponse<T>> {
     const res = await fetch(`${config.baseUrl}${path}`, {
       method: "PATCH",
       headers,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
     if (!res.ok) throw await parseError(res);
-    return res.json() as Promise<CivisResponse<T>>;
+    const payload = await parseResponse<T>(res);
+    return payload ?? { data: undefined as T };
   }
 
-  async function del(path: string): Promise<void> {
-    const res = await fetch(`${config.baseUrl}${path}`, {
+  async function del<T = never>(
+    path: string,
+    params?: Record<string, boolean | string | number | undefined>,
+    body?: unknown,
+  ): Promise<CivisResponse<T> | null> {
+    const res = await fetch(buildUrl(path, params), {
       method: "DELETE",
       headers,
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
     if (!res.ok) throw await parseError(res);
+    return parseResponse<T>(res);
   }
 
   return { get, list, post, put, patch, del };

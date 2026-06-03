@@ -76,6 +76,12 @@ export function getConsoleNavItems(locale: string): NavItem[] {
     },
     {
       section: "Apps",
+      label: "Control Panel",
+      href: `/${locale}/control-panel`,
+      permission: "control-panel:read",
+    },
+    {
+      section: "Apps",
       label: "Admin",
       href: `/${locale}/admin`,
     },

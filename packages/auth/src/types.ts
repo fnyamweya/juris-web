@@ -57,6 +57,8 @@ export type CasAccessTokenClaims = {
   user_id: string;
   platform_roles: string[];
   tenant_memberships: CasTenantMembership[];
+  /** Target tenant this token was issued for. Absent for platform-level tokens. */
+  tid?: string;
   iss: string;
   aud: string | string[];
   exp: number;
@@ -95,6 +97,53 @@ export type SessionPayload = {
   exp: number;
   /** Resolved tenant display data cached at login time */
   tenants: StoredTenant[];
+  /**
+   * The tenant this session is scoped to. Decoded from the `tid` JWT claim
+   * at callback time. Absent for platform-level (no-tenant) sessions.
+   */
+  activeTenantId?: string;
+};
+
+// ─── Server-side BFF session store ─────────────────────────────────────────
+
+export type BffSessionStatus =
+  | "ACTIVE"
+  | "LOCKED"
+  | "EXPIRED"
+  | "REVOKED"
+  | "INVALID";
+
+export type BffSessionMetadata = {
+  subject: string;
+  userId: string;
+  email?: string;
+  activeTenantId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  lastActivityAt?: string;
+  lockedAt?: string;
+  lastReauthenticatedAt?: string;
+  absoluteExpiresAt?: string;
+  refreshExpiresAt?: string;
+  accessTokenExpiresAt?: string;
+  authTime?: string;
+  amr?: string[];
+  acr?: string;
+  mfaCompletedAt?: string;
+  idleTimeoutSeconds?: number;
+  warningBeforeTimeoutSeconds?: number;
+  version?: number;
+};
+
+export type BffSessionResponse = {
+  status: BffSessionStatus;
+  payload: SessionPayload | null;
+  metadata: BffSessionMetadata | null;
+};
+
+export type BffSessionResult = {
+  handle: string;
+  session: BffSessionResponse;
 };
 
 // ─── PKCE state cookie payload ─────────────────────────────────────────────

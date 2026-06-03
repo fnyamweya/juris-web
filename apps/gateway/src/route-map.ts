@@ -3,6 +3,7 @@ export type GatewayRoute = {
   binding:
     | "PUBLIC"
     | "IDENTITY"
+    | "CONTROL_PANEL"
     | "CONSOLE"
     | "ADMIN"
     | "BILLING"
@@ -27,15 +28,22 @@ export const routeMap: GatewayRoute[] = [
       "/en/register",
       "/en/forgot-password",
       "/en/auth",
+      "/en/session",
+      "/en/select-tenant",
       "/sw/logout",
       "/sw/register",
       "/sw/forgot-password",
       "/sw/auth",
+      "/sw/session",
+      "/sw/select-tenant",
       "/fr/logout",
       "/fr/register",
       "/fr/forgot-password",
       "/fr/auth",
+      "/fr/session",
+      "/fr/select-tenant",
       "/api/auth",
+      "/api/session",
       "/oauth/callback",
     ],
   },
@@ -44,6 +52,16 @@ export const routeMap: GatewayRoute[] = [
     binding: "CONSOLE",
     localOrigin: "http://127.0.0.1:3003",
     prefixes: ["/en/console", "/sw/console", "/fr/console"],
+  },
+  {
+    name: "control-panel",
+    binding: "CONTROL_PANEL",
+    localOrigin: "http://127.0.0.1:3010",
+    prefixes: [
+      "/en/control-panel",
+      "/sw/control-panel",
+      "/fr/control-panel",
+    ],
   },
   {
     name: "admin",

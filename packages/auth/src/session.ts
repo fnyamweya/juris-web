@@ -1,4 +1,5 @@
 import { getEnv } from "@repo/platform";
+import { ensureBffSession } from "./bff-session";
 import { mockSession } from "./mock-session";
 import { decodeSessionCookie, SESSION_COOKIE_NAME } from "./session-codec";
 import type {
@@ -43,6 +44,8 @@ const ALL_PERMISSIONS = [
   "console:read",
   "admin:read",
   "admin:write",
+  "control-panel:read",
+  "control-panel:write",
   "billing:read",
   "billing:write",
   "reporting:read",
@@ -57,10 +60,28 @@ const PLATFORM_ROLE_PERMISSIONS: Record<string, string[]> = {
     "console:read",
     "admin:read",
     "admin:write",
+    "control-panel:read",
+    "control-panel:write",
     "reporting:read",
   ],
-  PLATFORM_SUPPORT: ["support:read"],
-  PLATFORM_SECURITY: [],
+  PLATFORM_IMPLEMENTATION: [
+    "console:read",
+    "admin:read",
+    "admin:write",
+    "control-panel:read",
+    "control-panel:write",
+    "reporting:read",
+    "settings:read",
+    "support:read",
+  ],
+  PLATFORM_READ_ONLY: [
+    "console:read",
+    "admin:read",
+    "control-panel:read",
+    "reporting:read",
+  ],
+  PLATFORM_SUPPORT: ["control-panel:read", "support:read"],
+  PLATFORM_SECURITY: ["control-panel:read"],
 };
 
 const TENANT_ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -85,6 +106,13 @@ const TENANT_ROLE_PERMISSIONS: Record<string, string[]> = {
   TENANT_MEMBER: ["console:read"],
 };
 
+function normalizeRoleId(role: string): string {
+  return role
+    .trim()
+    .replace(/[-:\s]+/g, "_")
+    .toUpperCase();
+}
+
 function derivePermissions(
   platformRoles: string[],
   tenantRoles: string[],
@@ -92,13 +120,18 @@ function derivePermissions(
   const set = new Set<string>();
 
   for (const role of platformRoles) {
-    for (const perm of PLATFORM_ROLE_PERMISSIONS[role] ?? []) {
+    const roleId = normalizeRoleId(role);
+    if (roleId.startsWith("PLATFORM_")) {
+      set.add("control-panel:read");
+    }
+    for (const perm of PLATFORM_ROLE_PERMISSIONS[roleId] ?? []) {
       set.add(perm);
     }
   }
 
   for (const role of tenantRoles) {
-    for (const perm of TENANT_ROLE_PERMISSIONS[role] ?? []) {
+    const roleId = normalizeRoleId(role);
+    for (const perm of TENANT_ROLE_PERMISSIONS[roleId] ?? []) {
       set.add(perm);
     }
   }
@@ -120,7 +153,8 @@ function buildSession(payload: SessionPayload): Session {
 
   // CAS may omit fields that are empty arrays — guard every array access.
   const platformRoles: string[] = atClaims.platform_roles ?? [];
-  const tenantMemberships: CasTenantMembership[] = atClaims.tenant_memberships ?? [];
+  const tenantMemberships: CasTenantMembership[] =
+    atClaims.tenant_memberships ?? [];
 
   const userId = atClaims.user_id ?? atClaims.sub;
 
@@ -137,7 +171,9 @@ function buildSession(payload: SessionPayload): Session {
     slug: t.slug,
   }));
 
-  const currentTenant = availableTenants[0];
+  const currentTenant =
+    availableTenants.find((t) => t.id === payload.activeTenantId) ??
+    availableTenants[0];
 
   const activeMembership = tenantMemberships.find(
     (m) => m.tenant_id === currentTenant?.id && m.status !== "INACTIVE",
@@ -166,22 +202,19 @@ export async function getMockSession(): Promise<AuthenticatedSession> {
 export async function getSession(): Promise<Session> {
   // Explicit mock bypass — only when USE_MOCK_SESSION=true and no real secret
   // is configured (prevents accidental activation in staging/production).
-  if (
-    getEnv("USE_MOCK_SESSION") === "true" &&
-    !getEnv("SESSION_SECRET")
-  ) {
+  if (getEnv("USE_MOCK_SESSION") === "true" && !getEnv("SESSION_SECRET")) {
     return mockSession;
   }
 
   const secret = getEnv("SESSION_SECRET");
-  if (!secret) return ANONYMOUS_SESSION;
 
   let cookieValue: string | undefined;
   try {
     // Dynamic import keeps @repo/auth free of a hard next dependency.
     // vite-ignore: intentional runtime-only resolution; unavailable outside Next.js
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    const nextHeaders = await import(/* @vite-ignore */ "next/headers").catch(() => null);
+    const nextHeaders = await import(/* @vite-ignore */ "next/headers").catch(
+      () => null,
+    );
     if (nextHeaders) {
       const store = await nextHeaders.cookies();
       cookieValue = store.get(SESSION_COOKIE_NAME)?.value;
@@ -192,11 +225,21 @@ export async function getSession(): Promise<Session> {
 
   if (!cookieValue) return ANONYMOUS_SESSION;
 
-  const payload = await decodeSessionCookie(cookieValue, secret);
-  if (!payload) return ANONYMOUS_SESSION;
+  const legacyPayload = secret
+    ? await decodeSessionCookie(cookieValue, secret)
+    : null;
+  if (legacyPayload) {
+    // Treat expired access tokens as anonymous; middleware handles refresh/redirect
+    if (legacyPayload.exp * 1000 < Date.now()) return ANONYMOUS_SESSION;
+    return buildSession(legacyPayload);
+  }
 
-  // Treat expired access tokens as anonymous; middleware handles refresh/redirect
-  if (payload.exp * 1000 < Date.now()) return ANONYMOUS_SESSION;
-
-  return buildSession(payload);
+  const bffSession = await ensureBffSession(cookieValue, {
+    touch: true,
+    refreshThresholdSeconds: 60,
+  });
+  if (bffSession.status !== "ACTIVE" || !bffSession.payload) {
+    return ANONYMOUS_SESSION;
+  }
+  return buildSession(bffSession.payload);
 }

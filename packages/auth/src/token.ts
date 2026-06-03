@@ -1,4 +1,5 @@
 import { getEnv } from "@repo/platform";
+import { ensureBffSession } from "./bff-session";
 import { decodeSessionCookie, SESSION_COOKIE_NAME } from "./session-codec";
 
 /**
@@ -8,7 +9,6 @@ import { decodeSessionCookie, SESSION_COOKIE_NAME } from "./session-codec";
  */
 export async function getAccessToken(): Promise<string | null> {
   const secret = getEnv("SESSION_SECRET");
-  if (!secret) return null;
 
   let cookieValue: string | undefined;
   try {
@@ -25,9 +25,17 @@ export async function getAccessToken(): Promise<string | null> {
 
   if (!cookieValue) return null;
 
-  const payload = await decodeSessionCookie(cookieValue, secret);
-  if (!payload) return null;
-  if (payload.exp * 1000 < Date.now()) return null;
+  const legacyPayload = secret
+    ? await decodeSessionCookie(cookieValue, secret)
+    : null;
+  if (legacyPayload) {
+    if (legacyPayload.exp * 1000 < Date.now()) return null;
+    return legacyPayload.at;
+  }
 
-  return payload.at;
+  const bffSession = await ensureBffSession(cookieValue, {
+    touch: false,
+    refreshThresholdSeconds: 60,
+  });
+  return bffSession.status === "ACTIVE" ? (bffSession.payload?.at ?? null) : null;
 }

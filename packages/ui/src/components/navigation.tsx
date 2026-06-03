@@ -32,6 +32,7 @@ import {
   LayoutDashboard,
   Layers3,
   LifeBuoy,
+  ListChecks,
   LogOut,
   Menu,
   MessageSquare,
@@ -48,6 +49,7 @@ import {
   Settings,
   Shield,
   ShieldAlert,
+  ShieldCheck,
   Sidebar,
   SlidersHorizontal,
   Sparkles,
@@ -56,6 +58,7 @@ import {
   Sun,
   Type,
   UserCircle,
+  UserPlus,
   Users,
   PlugZap,
 } from "lucide-react";
@@ -479,6 +482,15 @@ function resolveNavIcon(item: NavItem) {
   }
   if (href.includes("/tenants")) {
     return Users;
+  }
+  if (href.includes("/control-panel/onboarding")) {
+    return UserPlus;
+  }
+  if (href.includes("/control-panel/actions")) {
+    return ListChecks;
+  }
+  if (href.includes("/control-panel")) {
+    return ShieldCheck;
   }
   if (href.includes("/operations/queue")) {
     return Layers3;

@@ -18,10 +18,13 @@ export function createMembersResource(http: Http) {
         {
           limit: params?.limit,
           cursor: params?.cursor,
-          search: params?.search,
-          status: params?.status,
-          role: params?.role,
-        },
+        search: params?.search,
+        status: params?.status,
+        role: params?.role,
+        createdAfter: params?.createdAfter,
+        createdBefore: params?.createdBefore,
+        sort: params?.sort,
+      },
       );
       return { data: res.data, meta: res.meta };
     },
@@ -63,10 +66,17 @@ export function createMembersResource(http: Http) {
       tenantId: string,
       userId: string,
       roleId: string,
+      options?: {
+        grantedBy?: string;
+        makerRoles?: string[];
+        idempotencyKey?: string;
+        correlationId?: string;
+        mfaAuthenticated?: boolean;
+      },
     ): Promise<AssignRoleResponse> {
       const res = await http.post<AssignRoleResponse>(
         `/platform/api/v1/tenants/${tenantId}/members/${userId}/roles`,
-        { roleId },
+        { roleId, ...options },
       );
       return res!.data;
     },
@@ -75,10 +85,11 @@ export function createMembersResource(http: Http) {
       tenantId: string,
       userId: string,
       roleId: string,
-    ): Promise<void> {
-      await http.del(
+    ): Promise<AssignRoleResponse | null> {
+      const res = await http.del<AssignRoleResponse>(
         `/platform/api/v1/tenants/${tenantId}/members/${userId}/roles/${roleId}`,
       );
+      return res?.data ?? null;
     },
   };
 }

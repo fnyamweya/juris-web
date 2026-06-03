@@ -1,3 +1,4 @@
+import { SessionLockTimer } from "@repo/auth/session-lock-timer";
 import { getDirection, getMessages, isLocale, locales } from "@repo/i18n";
 import { CSP_NONCE_HEADER } from "@repo/security";
 import { ThemeProvider, Toaster } from "@repo/ui";
@@ -35,6 +36,7 @@ export default async function LocaleLayout({
     <div lang={locale} dir={getDirection(locale)}>
       <NextIntlClientProvider locale={locale} messages={messages}>
         <ThemeProvider nonce={nonce}>
+          <SessionLockTimer locale={locale} />
           {children}
           <Toaster richColors closeButton />
         </ThemeProvider>

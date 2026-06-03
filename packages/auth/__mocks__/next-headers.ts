@@ -3,8 +3,11 @@
 // Tests that need specific cookie behaviour override this with vi.mock().
 import { vi } from "vitest";
 
-export const cookies = vi.fn(async () => ({
-  get: vi.fn((_name: string) => undefined),
+export const cookies = vi.fn(() => ({
+  get: vi.fn((name: string) => {
+    void name;
+    return undefined;
+  }),
   set: vi.fn(),
   delete: vi.fn(),
 }));

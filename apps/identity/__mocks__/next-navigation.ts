@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 
-export const redirect = vi.fn<[string], never>(() => {
+export const redirect = vi.fn((url: string): never => {
+  void url;
   throw new Error("NEXT_REDIRECT");
 });
 

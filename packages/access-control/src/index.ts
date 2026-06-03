@@ -5,6 +5,8 @@ export const permissions = [
   "console:read",
   "admin:read",
   "admin:write",
+  "control-panel:read",
+  "control-panel:write",
   "billing:read",
   "billing:write",
   "reporting:read",

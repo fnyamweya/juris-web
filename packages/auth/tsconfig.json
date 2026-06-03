@@ -7,6 +7,6 @@
     },
     "types": ["node"]
   },
-  "include": ["src", "vitest.config.ts", "vitest.setup.ts"],
+  "include": ["src", "__mocks__", "vitest.config.ts", "vitest.setup.ts"],
   "exclude": ["node_modules", "dist"]
 }

@@ -24,10 +24,11 @@ export default async function LoginPage({
   searchParams: Promise<{
     error?: string;
     returnTo?: string;
+    tenant_id?: string;
   }>;
 }) {
   const { locale } = await params;
-  const { error, returnTo } = await searchParams;
+  const { error, returnTo, tenant_id: tenantId } = await searchParams;
 
   const errorMessage = error
     ? (AUTH_ERROR_MESSAGES[error] ?? decodeURIComponent(error))
@@ -120,7 +121,11 @@ export default async function LoginPage({
             )}
 
             {/* Sign in button */}
-            <SignInButton locale={locale} returnTo={safeReturnTo} />
+            <SignInButton
+              locale={locale}
+              returnTo={safeReturnTo}
+              {...(tenantId !== undefined ? { tenantId } : {})}
+            />
 
             {/* Footer */}
             <p className="text-center text-[0.6875rem] leading-relaxed text-muted-foreground/70">

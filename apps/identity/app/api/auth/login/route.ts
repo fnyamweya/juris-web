@@ -13,8 +13,6 @@ import {
   CIVIS_BFF_VERIFIER,
 } from "@/lib/bff-cookies";
 
-// 15 minutes — long enough for users navigating back/forward during the flow
-// without expiring cookies mid-session.
 const FLOW_COOKIE_MAX_AGE = 900;
 
 type BffLoginData = {
@@ -37,21 +35,27 @@ function getSetCookieStrings(headers: Headers): string[] {
   return raw.split(/,(?=\s*[A-Za-z0-9_-]+=)/).map((s) => s.trim());
 }
 
-/**
- * GET /api/auth/login
- *
- * Initiates the OAuth2 PKCE authorization flow. Calls the civis-core BFF
- * bootstrap endpoint to get the CAS authorization URL and PKCE state cookies,
- * then redirects the browser to CAS for credential entry.
- *
- * Falls back to generating PKCE locally if civis-core is unreachable so the
- * login page is never blocked by the API being down.
- */
 export async function GET(request: NextRequest): Promise<Response> {
   const { searchParams } = request.nextUrl;
   const locale = searchParams.get("locale") ?? "en";
   const returnTo = searchParams.get("returnTo") ?? `/${locale}/console`;
-  const safeReturnTo = returnTo.startsWith("/") ? returnTo : `/${locale}/console`;
+  const safeReturnTo = returnTo.startsWith("/")
+    ? returnTo
+    : `/${locale}/console`;
+
+  // tenant_id: explicit param takes precedence; fall back to signed tenant-ctx cookie
+  // so tenant users get tenant-scoped tokens (correct TTL) even from the generic login page.
+  const secret = getEnv("SESSION_SECRET");
+  const explicitTenantId = searchParams.get("tenant_id") ?? undefined;
+  let tenantId = explicitTenantId;
+  if (!tenantId && secret) {
+    const { decodeTenantCtxCookie, TENANT_CTX_COOKIE_NAME } =
+      await import("@repo/auth");
+    const raw = request.cookies.get(TENANT_CTX_COOKIE_NAME)?.value;
+    if (raw) {
+      tenantId = (await decodeTenantCtxCookie(raw, secret)) ?? undefined;
+    }
+  }
 
   const civisCoreUrl = requireEnv("CIVIS_CORE_URL");
   const baseUrl = requireEnv("JURIS_BASE_URL");
@@ -66,9 +70,9 @@ export async function GET(request: NextRequest): Promise<Response> {
     secure,
   };
 
-  // ── Primary: delegate PKCE to civis-core BFF ─────────────────────────────
   const bffUrl = new URL(`${civisCoreUrl}/v1/ui/login/bff`);
   bffUrl.searchParams.set("redirectUri", redirectUri);
+  if (tenantId) bffUrl.searchParams.set("tenantId", tenantId);
 
   try {
     const res = await fetch(bffUrl.toString(), {
@@ -86,7 +90,11 @@ export async function GET(request: NextRequest): Promise<Response> {
         if (eqIdx === -1) continue;
         const name = nameValue.substring(0, eqIdx).trim();
         const value = nameValue.substring(eqIdx + 1).trim();
-        if (name !== CIVIS_BFF_VERIFIER && name !== CIVIS_BFF_STATE && name !== CIVIS_BFF_NONCE) {
+        if (
+          name !== CIVIS_BFF_VERIFIER &&
+          name !== CIVIS_BFF_STATE &&
+          name !== CIVIS_BFF_NONCE
+        ) {
           continue;
         }
         response.cookies.set(name, value, appFlowCookie);
@@ -104,7 +112,6 @@ export async function GET(request: NextRequest): Promise<Response> {
     // civis-core unreachable — fall through to local PKCE generation
   }
 
-  // ── Fallback: generate PKCE locally ──────────────────────────────────────
   const casUrl = getEnv("CAS_ISSUER_URL");
   const clientId = getEnv("CAS_BFF_CLIENT_ID");
   const sessionSecret = getEnv("SESSION_SECRET");
@@ -115,7 +122,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     );
   }
 
-  const pkce = await generatePkceState();
+  const pkce = generatePkceState();
   const codeChallenge = await generateCodeChallenge(pkce.codeVerifier);
 
   const encryptedPkce = await encodePkceState(
@@ -141,6 +148,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   authorizeUrl.searchParams.set("nonce", pkce.nonce);
   authorizeUrl.searchParams.set("code_challenge", codeChallenge);
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
+  if (tenantId) authorizeUrl.searchParams.set("tenant_id", tenantId);
 
   const response = NextResponse.redirect(authorizeUrl);
   response.cookies.set(PKCE_COOKIE_NAME, encryptedPkce, appFlowCookie);
@@ -149,6 +157,11 @@ export async function GET(request: NextRequest): Promise<Response> {
     JSON.stringify({ locale, returnTo: safeReturnTo }),
     appFlowCookie,
   );
+  // Clear any stale BFF cookies so a previous incomplete BFF flow cannot
+  // interfere with state validation in /oauth/callback.
+  response.cookies.delete(CIVIS_BFF_STATE);
+  response.cookies.delete(CIVIS_BFF_VERIFIER);
+  response.cookies.delete(CIVIS_BFF_NONCE);
 
   return response;
 }

@@ -15,7 +15,7 @@ export function generateNonce(): string {
   return base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer);
 }
 
-export async function generateCodeVerifier(): Promise<string> {
+export function generateCodeVerifier(): string {
   // 96 random bytes → 128-char base64url string (within 43-128 char PKCE spec)
   return base64UrlEncode(crypto.getRandomValues(new Uint8Array(96)).buffer);
 }
@@ -34,8 +34,8 @@ export type PkceState = {
   codeVerifier: string;
 };
 
-export async function generatePkceState(): Promise<PkceState> {
-  const codeVerifier = await generateCodeVerifier();
+export function generatePkceState(): PkceState {
+  const codeVerifier = generateCodeVerifier();
   return {
     state: generateState(),
     nonce: generateNonce(),

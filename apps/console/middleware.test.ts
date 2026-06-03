@@ -160,6 +160,30 @@ describe("console middleware auth guard", () => {
     expect(setCookie).toContain("juris-session=;");
   });
 
+  it("redirects opaque locked sessions to the lock screen", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            status: "LOCKED",
+            payload: null,
+            metadata: { subject: "u1", userId: "u1" },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const { middleware } = await import("./middleware");
+    const req = makeRequest("/en/console/overview", "opaque-session-handle");
+    const response = await middleware(req);
+
+    expect(response.status).toBe(307);
+    const location = response.headers.get("Location") ?? "";
+    expect(location).toContain("/en/session/locked");
+    expect(location).toContain("returnTo=");
+  });
+
   it("refreshes token transparently when access token is expired and refresh succeeds", async () => {
     const cookie = await buildSessionCookie(EXPIRED_SESSION);
     mockRefreshSuccess();

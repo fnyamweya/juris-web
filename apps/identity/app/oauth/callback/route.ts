@@ -1,14 +1,17 @@
-import type { CasAccessTokenClaims, SessionPayload, StoredTenant } from "@repo/auth";
 import {
+  type BffSessionResponse,
+  createBffSession,
   decodePkceState,
-  encodeSessionCookie,
+  encodeTenantCtxCookie,
   exchangeAuthorizationCode,
   PKCE_COOKIE_NAME,
+  reactivateBffSession,
   SESSION_COOKIE_NAME,
+  TENANT_CTX_COOKIE_MAX_AGE,
+  TENANT_CTX_COOKIE_NAME,
 } from "@repo/auth";
 import { getEnv, requireEnv } from "@repo/platform";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import type { NextRequest } from "next/server";
 import {
   APP_FLOW_COOKIE_NAME,
@@ -16,6 +19,10 @@ import {
   CIVIS_BFF_STATE,
   CIVIS_BFF_VERIFIER,
 } from "@/lib/bff-cookies";
+import {
+  activeTenantIdFromToken,
+  resolveTenantsFromToken,
+} from "@/lib/tenant-resolution";
 
 const SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 
@@ -24,6 +31,48 @@ function isSecure(): boolean {
     getEnv("NEXT_PUBLIC_APP_ENV") === "production" ||
     getEnv("NEXT_PUBLIC_APP_ENV") === "staging"
   );
+}
+
+// ─── Cookie builders ────────────────────────────────────────────────────────
+// Build Set-Cookie header strings directly to avoid any interaction between
+// the next/headers cookies() API and NextResponse — in Next.js 15 Route Handlers
+// this combination is unreliable and can cause Set-Cookie headers to be dropped.
+
+function setCookie(
+  name: string,
+  value: string,
+  maxAge: number,
+  secure: boolean,
+): string {
+  const parts = [
+    `${name}=${value}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${maxAge}`,
+  ];
+  if (secure) parts.push("Secure");
+  return parts.join("; ");
+}
+
+function deleteCookie(name: string): string {
+  return `${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+}
+
+function loginRedirectResponse(
+  locale: string,
+  cookiesToDelete: string[],
+  reason?: string,
+): Response {
+  const base = getEnv("JURIS_BASE_URL") ?? "http://localhost:3000";
+  const dest = reason
+    ? `/${locale}/login?error=${encodeURIComponent(reason)}`
+    : `/${locale}/login`;
+  const headers = new Headers({ Location: new URL(dest, base).toString() });
+  for (const name of cookiesToDelete) {
+    headers.append("Set-Cookie", deleteCookie(name));
+  }
+  return new Response(null, { status: 302, headers });
 }
 
 export async function GET(request: NextRequest): Promise<Response> {
@@ -38,11 +87,23 @@ export async function GET(request: NextRequest): Promise<Response> {
   const appFlowRaw = request.cookies.get(APP_FLOW_COOKIE_NAME)?.value;
   let locale = "en";
   let returnTo = "/en/console";
-  if (appFlowRaw) {
-    try {
-      const appFlow = JSON.parse(appFlowRaw) as {
+  let appFlow:
+    | {
         locale?: string;
         returnTo?: string;
+        flow?: "login" | "reactivate";
+        sessionHandle?: string;
+        reauthStartedAt?: string;
+      }
+    | undefined;
+  if (appFlowRaw) {
+    try {
+      appFlow = JSON.parse(appFlowRaw) as {
+        locale?: string;
+        returnTo?: string;
+        flow?: "login" | "reactivate";
+        sessionHandle?: string;
+        reauthStartedAt?: string;
       };
       if (appFlow.locale) locale = appFlow.locale;
       if (appFlow.returnTo) returnTo = appFlow.returnTo;
@@ -51,13 +112,21 @@ export async function GET(request: NextRequest): Promise<Response> {
     }
   }
 
-  // ── Resolve PKCE state + verifier ─────────────────────────────────────────
-  // Primary path: civis-core BFF set these cookies during /api/auth/login.
-  let storedState: string | undefined = request.cookies.get(CIVIS_BFF_STATE)?.value;
-  let codeVerifier: string | undefined = request.cookies.get(CIVIS_BFF_VERIFIER)?.value;
-  let usingBffCookies = !!storedState;
+  // Always delete every possible flow cookie so stale state never causes a loop.
+  const allFlowCookies = [
+    APP_FLOW_COOKIE_NAME,
+    CIVIS_BFF_STATE,
+    CIVIS_BFF_VERIFIER,
+    CIVIS_BFF_NONCE,
+    PKCE_COOKIE_NAME,
+  ];
 
-  // Fallback path: we generated PKCE locally and stored it in juris-pkce.
+  // ── Resolve PKCE state + verifier ─────────────────────────────────────────
+  let storedState: string | undefined =
+    request.cookies.get(CIVIS_BFF_STATE)?.value;
+  let codeVerifier: string | undefined =
+    request.cookies.get(CIVIS_BFF_VERIFIER)?.value;
+
   if (!storedState || !codeVerifier) {
     const pkceRaw = request.cookies.get(PKCE_COOKIE_NAME)?.value;
     const secret = getEnv("SESSION_SECRET");
@@ -66,30 +135,16 @@ export async function GET(request: NextRequest): Promise<Response> {
       if (pkce) {
         storedState = pkce.state;
         codeVerifier = pkce.codeVerifier;
-        // Also pick up locale/returnTo from the PKCE payload (overrides appFlow)
         if (pkce.locale) locale = pkce.locale;
         if (pkce.returnTo) returnTo = pkce.returnTo;
-        usingBffCookies = false;
       }
     }
   }
 
-  function clearFlowCookies() {
-    if (usingBffCookies) {
-      cookieStore.delete(CIVIS_BFF_STATE);
-      cookieStore.delete(CIVIS_BFF_VERIFIER);
-      cookieStore.delete(CIVIS_BFF_NONCE);
-    } else {
-      cookieStore.delete(PKCE_COOKIE_NAME);
-    }
-    cookieStore.delete(APP_FLOW_COOKIE_NAME);
-  }
-
   // ── Handle CAS error response ─────────────────────────────────────────────
   if (errorParam) {
-    clearFlowCookies();
     const desc = searchParams.get("error_description") ?? errorParam;
-    redirect(`/${locale}/login?error=${encodeURIComponent(desc)}`);
+    return loginRedirectResponse(locale, allFlowCookies, desc);
   }
 
   if (!code || !stateParam) {
@@ -100,20 +155,11 @@ export async function GET(request: NextRequest): Promise<Response> {
   }
 
   if (!storedState || storedState !== stateParam) {
-    // State mismatch is almost always caused by back-button navigation starting
-    // a new OAuth2 flow that overwrites the state cookie while CAS completes the
-    // old one. It is NOT a CSRF attack in normal browser usage. Rather than
-    // showing a scary "could not be verified" error, clear the stale cookies and
-    // silently redirect to the login page so the user can start fresh — the
-    // server logs this at WARN level so security teams can detect genuine attacks.
-    clearFlowCookies();
-    redirect(`/${locale}/login`);
+    return loginRedirectResponse(locale, allFlowCookies);
   }
 
   if (!codeVerifier) {
-    clearFlowCookies();
-    // Verifier gone — cookies expired or were cleared. Silent restart.
-    redirect(`/${locale}/login`);
+    return loginRedirectResponse(locale, allFlowCookies);
   }
 
   // ── Token exchange ────────────────────────────────────────────────────────
@@ -133,94 +179,115 @@ export async function GET(request: NextRequest): Promise<Response> {
     codeVerifier,
   });
 
-  clearFlowCookies();
-
   if (!result.ok) {
     const desc = result.error.error_description ?? result.error.error;
-    redirect(`/${locale}/login?error=${encodeURIComponent(desc)}`);
+    return loginRedirectResponse(locale, allFlowCookies, desc);
   }
 
   const { access_token, id_token, refresh_token, expires_in } = result.tokens;
 
+  const activeTenantId = activeTenantIdFromToken(access_token);
   const civisCoreUrl =
     getEnv("CIVIS_CORE_URL") ?? casUrl.replace(":9000", ":8080");
   const tenants = await resolveTenantsFromToken(access_token, civisCoreUrl);
+  const secure = isSecure();
 
-  const sessionPayload: SessionPayload = {
-    at: access_token,
-    it: id_token,
-    rt: refresh_token,
-    exp: Math.floor(Date.now() / 1000) + expires_in,
-    tenants,
-  };
+  const safeReturnTo = returnTo.startsWith("/")
+    ? returnTo
+    : `/${locale}/console`;
+  const isReactivation = appFlow?.flow === "reactivate";
+  const sessionHandle = appFlow?.sessionHandle;
+  const destination =
+    !isReactivation && !activeTenantId && tenants.length > 1
+      ? `/${locale}/select-tenant?returnTo=${encodeURIComponent(safeReturnTo)}`
+      : safeReturnTo;
 
-  const encryptedSession = await encodeSessionCookie(sessionPayload, sessionSecret);
+  if (isReactivation && !sessionHandle) {
+    return loginRedirectResponse(locale, allFlowCookies, "reauth_failed");
+  }
 
-  cookieStore.set(SESSION_COOKIE_NAME, encryptedSession, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_COOKIE_MAX_AGE,
-    secure: isSecure(),
+  let opaqueSessionHandle: string | undefined;
+  let storedSession: BffSessionResponse | undefined;
+  if (isReactivation && sessionHandle) {
+    opaqueSessionHandle = sessionHandle;
+    storedSession = await reactivateBffSession({
+      handle: sessionHandle,
+      accessToken: access_token,
+      idToken: id_token,
+      refreshToken: refresh_token,
+      expiresIn: expires_in,
+      ...(appFlow?.reauthStartedAt
+        ? { reauthStartedAt: appFlow.reauthStartedAt }
+        : {}),
+    });
+  } else {
+    const sessionStoreResult = await createBffSession({
+      accessToken: access_token,
+      idToken: id_token,
+      refreshToken: refresh_token,
+      expiresIn: expires_in,
+      tenants,
+      ...(activeTenantId !== undefined ? { activeTenantId } : {}),
+    });
+    opaqueSessionHandle = sessionStoreResult?.handle;
+    storedSession = sessionStoreResult?.session;
+  }
+
+  if (!opaqueSessionHandle || storedSession?.status !== "ACTIVE") {
+    return loginRedirectResponse(
+      locale,
+      allFlowCookies,
+      isReactivation ? "reauth_failed" : "session_store_unavailable",
+    );
+  }
+
+  // ── Build response with explicit Set-Cookie headers ────────────────────────
+  // Using raw Response + Headers to guarantee Set-Cookie headers are included
+  // in the redirect. next/headers cookies().set() combined with NextResponse
+  // is unreliable in Next.js 15 Route Handlers (headers may be dropped).
+  const headers = new Headers({
+    Location: new URL(destination, baseUrl).toString(),
   });
 
-  const safeReturnTo = returnTo.startsWith("/") ? returnTo : `/${locale}/console`;
-  redirect(safeReturnTo);
-}
-
-// ─── Tenant resolution ─────────────────────────────────────────────────────
-
-function parseJwt<T>(token: string): T | null {
-  try {
-    const b64 = token.split(".")[1];
-    if (!b64) return null;
-    const padded =
-      b64.replace(/-/g, "+").replace(/_/g, "/") +
-      "=".repeat((4 - (b64.length % 4)) % 4);
-    return JSON.parse(atob(padded)) as T;
-  } catch {
-    return null;
-  }
-}
-
-type TenantApiBody = { data?: { id: string; name: string; slug: string } };
-
-async function resolveTenantsFromToken(
-  accessToken: string,
-  civisCoreUrl: string,
-): Promise<StoredTenant[]> {
-  const claims = parseJwt<CasAccessTokenClaims>(accessToken);
-  if (!claims?.tenant_memberships?.length) return [];
-
-  const results = await Promise.allSettled(
-    claims.tenant_memberships
-      .filter((m) => m.status !== "INACTIVE")
-      .map(async (m): Promise<StoredTenant> => {
-        const fallback: StoredTenant = {
-          id: m.tenant_id,
-          name: m.tenant_id,
-          slug: m.tenant_id,
-        };
-
-        const res = await fetch(
-          `${civisCoreUrl}/platform/api/v1/tenants/${m.tenant_id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              Accept: "application/json",
-            },
-          },
-        ).catch(() => null);
-
-        if (!res?.ok) return fallback;
-
-        const body = (await res.json()) as TenantApiBody;
-        const d = body.data;
-        return d ? { id: d.id, name: d.name, slug: d.slug } : fallback;
-      }),
+  // Session cookie — the critical one
+  headers.append(
+    "Set-Cookie",
+    setCookie(
+      SESSION_COOKIE_NAME,
+      opaqueSessionHandle,
+      SESSION_COOKIE_MAX_AGE,
+      secure,
+    ),
   );
 
-  return results
-    .filter((r) => r.status === "fulfilled")
-    .map((r) => (r as PromiseFulfilledResult<StoredTenant>).value);
+  // Tenant context cookie — enables middleware to forward tenant_id on next login
+  const tenantCtxId =
+    activeTenantId ??
+    storedSession.metadata?.activeTenantId ??
+    (tenants.length === 1 ? tenants[0]?.id : undefined);
+  if (tenantCtxId) {
+    const tenantCtxValue = await encodeTenantCtxCookie(
+      tenantCtxId,
+      sessionSecret,
+    );
+    headers.append(
+      "Set-Cookie",
+      setCookie(
+        TENANT_CTX_COOKIE_NAME,
+        tenantCtxValue,
+        TENANT_CTX_COOKIE_MAX_AGE,
+        secure,
+      ),
+    );
+  }
+
+  // Delete all flow cookies
+  for (const name of allFlowCookies) {
+    headers.append("Set-Cookie", deleteCookie(name));
+  }
+
+  // Suppress reading from cookieStore (avoid any stale pending state leaking in)
+  void cookieStore;
+
+  return new Response(null, { status: 307, headers });
 }

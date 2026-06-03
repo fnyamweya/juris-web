@@ -22,10 +22,7 @@ function isSecure(): boolean {
  * via the civis-core BFF and redirects to CAS. Used from form-based flows
  * (register page) where a direct anchor link isn't possible.
  */
-export async function initiateLogin(
-  locale: string,
-  returnTo?: string,
-): Promise<void> {
+export function initiateLogin(locale: string, returnTo?: string): void {
   const params = new URLSearchParams({ locale });
   if (returnTo) params.set("returnTo", returnTo);
   redirect(`/api/auth/login?${params.toString()}`);
@@ -41,12 +38,27 @@ export async function initiateEnterpriseSSO(
   providerKey: string,
   returnTo?: string,
 ): Promise<void> {
+  const url = await buildSSOAuthorizeUrl(locale, tenantId, providerKey, returnTo);
+  redirect(url);
+}
+
+/**
+ * Sets up PKCE state cookies and returns the CAS authorize URL for an SSO
+ * provider. Use this from client components where window.location.replace()
+ * is preferred over redirect() to avoid polluting the browser history stack.
+ */
+export async function buildSSOAuthorizeUrl(
+  locale: string,
+  tenantId: string,
+  providerKey: string,
+  returnTo?: string,
+): Promise<string> {
   const casUrl = requireEnv("CAS_ISSUER_URL");
   const clientId = requireEnv("CAS_BFF_CLIENT_ID");
   const baseUrl = requireEnv("JURIS_BASE_URL");
   const sessionSecret = requireEnv("SESSION_SECRET");
 
-  const pkce = await generatePkceState();
+  const pkce = generatePkceState();
   const codeChallenge = await generateCodeChallenge(pkce.codeVerifier);
   const redirectUri = `${baseUrl}/${locale}/auth/callback`;
 
@@ -84,5 +96,5 @@ export async function initiateEnterpriseSSO(
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
   authorizeUrl.searchParams.set("kc_idp_hint", `${tenantId}/${providerKey}`);
 
-  redirect(authorizeUrl.toString());
+  return authorizeUrl.toString();
 }

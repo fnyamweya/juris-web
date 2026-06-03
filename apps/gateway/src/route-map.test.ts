@@ -4,8 +4,10 @@ import { resolveRoute } from "./route-map";
 describe("gateway route map", () => {
   it("resolves product paths", () => {
     expect(resolveRoute("/en/console")?.name).toBe("console");
+    expect(resolveRoute("/en/control-panel/tenants")?.name).toBe("control-panel");
     expect(resolveRoute("/en/billing/invoices")?.name).toBe("billing");
     expect(resolveRoute("/en/login")?.name).toBe("identity");
+    expect(resolveRoute("/en/session/locked")?.name).toBe("identity");
     expect(resolveRoute("/en")?.name).toBe("public");
   });
 });

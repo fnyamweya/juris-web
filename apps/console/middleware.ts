@@ -7,9 +7,12 @@ import {
 } from "@repo/security";
 import {
   decodeSessionCookie,
+  decodeTenantCtxCookie,
+  ensureBffSession,
   refreshAccessToken,
   encodeSessionCookie,
   SESSION_COOKIE_NAME,
+  TENANT_CTX_COOKIE_NAME,
 } from "@repo/auth";
 import type { SessionPayload } from "@repo/auth";
 import { NextResponse, type NextRequest } from "next/server";
@@ -39,7 +42,25 @@ function withSecurityHeaders(
   return response;
 }
 
-function loginRedirect(
+async function loginRedirect(
+  request: NextRequest,
+  locale: string,
+  nonce: string,
+  secret: string,
+): Promise<NextResponse> {
+  const returnTo = encodeURIComponent(
+    request.nextUrl.pathname + request.nextUrl.search,
+  );
+  const loginUrl = new URL(`/${locale}/login?returnTo=${returnTo}`, request.url);
+  const tenantCtxRaw = request.cookies.get(TENANT_CTX_COOKIE_NAME)?.value;
+  if (tenantCtxRaw) {
+    const tenantId = await decodeTenantCtxCookie(tenantCtxRaw, secret);
+    if (tenantId) loginUrl.searchParams.set("tenant_id", tenantId);
+  }
+  return withSecurityHeaders(NextResponse.redirect(loginUrl), nonce);
+}
+
+function lockedRedirect(
   request: NextRequest,
   locale: string,
   nonce: string,
@@ -47,8 +68,11 @@ function loginRedirect(
   const returnTo = encodeURIComponent(
     request.nextUrl.pathname + request.nextUrl.search,
   );
-  const loginUrl = new URL(`/${locale}/login?returnTo=${returnTo}`, request.url);
-  return withSecurityHeaders(NextResponse.redirect(loginUrl), nonce);
+  const lockedUrl = new URL(
+    `/${locale}/session/locked?returnTo=${returnTo}`,
+    request.url,
+  );
+  return withSecurityHeaders(NextResponse.redirect(lockedUrl), nonce);
 }
 
 export async function middleware(request: NextRequest) {
@@ -60,6 +84,7 @@ export async function middleware(request: NextRequest) {
   // Pass through static assets and API health routes
   if (
     pathname.startsWith("/api/health/") ||
+    pathname.startsWith("/api/session/") ||
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico"
   ) {
@@ -95,13 +120,26 @@ export async function middleware(request: NextRequest) {
     const cookieValue = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
     if (!cookieValue) {
-      return loginRedirect(request, locale, nonce);
+      return await loginRedirect(request, locale, nonce, secret);
     }
 
     const payload = await decodeSessionCookie(cookieValue, secret);
 
     if (!payload) {
-      const response = loginRedirect(request, locale, nonce);
+      const bffSession = await ensureBffSession(cookieValue, {
+        touch: true,
+        refreshThresholdSeconds: REFRESH_THRESHOLD_SECONDS,
+      });
+      if (bffSession.status === "LOCKED") {
+        return lockedRedirect(request, locale, nonce);
+      }
+      if (bffSession.status === "ACTIVE" && bffSession.payload) {
+        return withSecurityHeaders(
+          NextResponse.next({ request: { headers: requestHeaders } }),
+          nonce,
+        );
+      }
+      const response = await loginRedirect(request, locale, nonce, secret);
       response.cookies.delete(SESSION_COOKIE_NAME);
       return response;
     }
@@ -113,7 +151,7 @@ export async function middleware(request: NextRequest) {
       const refreshed = await attemptRefresh(payload, secret);
 
       if (!refreshed) {
-        const response = loginRedirect(request, locale, nonce);
+        const response = await loginRedirect(request, locale, nonce, secret);
         response.cookies.delete(SESSION_COOKIE_NAME);
         return response;
       }

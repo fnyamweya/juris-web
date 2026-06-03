@@ -1,15 +1,21 @@
-import type { CasAccessTokenClaims, SessionPayload, StoredTenant } from "@repo/auth";
 import {
+  createBffSession,
   decodePkceState,
-  encodeSessionCookie,
+  encodeTenantCtxCookie,
   exchangeAuthorizationCode,
   PKCE_COOKIE_NAME,
   SESSION_COOKIE_NAME,
+  TENANT_CTX_COOKIE_MAX_AGE,
+  TENANT_CTX_COOKIE_NAME,
 } from "@repo/auth";
 import { getEnv, requireEnv } from "@repo/platform";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { NextRequest } from "next/server";
+import {
+  activeTenantIdFromToken,
+  resolveTenantsFromToken,
+} from "@/lib/tenant-resolution";
 
 const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
@@ -83,83 +89,52 @@ export async function GET(
   const { access_token, id_token, refresh_token, expires_in } = result.tokens;
 
   // Resolve tenant display names from civis-core (best-effort; falls back to id)
-  const civisCoreUrl = getEnv("CIVIS_CORE_URL") ?? casUrl.replace(":9000", ":8080");
+  const civisCoreUrl =
+    getEnv("CIVIS_CORE_URL") ?? casUrl.replace(":9000", ":8080");
   const tenants = await resolveTenantsFromToken(access_token, civisCoreUrl);
+  const activeTenantId = activeTenantIdFromToken(access_token);
 
-  const sessionPayload: SessionPayload = {
-    at: access_token,
-    it: id_token,
-    rt: refresh_token,
-    exp: Math.floor(Date.now() / 1000) + expires_in,
+  const bffSession = await createBffSession({
+    accessToken: access_token,
+    idToken: id_token,
+    refreshToken: refresh_token,
+    expiresIn: expires_in,
     tenants,
-  };
-
-  const encryptedSession = await encodeSessionCookie(sessionPayload, sessionSecret);
-
-  cookieStore.set(SESSION_COOKIE_NAME, encryptedSession, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
-    secure: isSecure(),
+    ...(activeTenantId !== undefined ? { activeTenantId } : {}),
   });
-
-  redirect(pkce.returnTo ?? `/${locale}/console`);
-}
-
-// ─── Helpers ───────────────────────────────────────────────────────────────
-
-function parseJwt<T>(token: string): T | null {
-  try {
-    const b64 = token.split(".")[1];
-    if (!b64) return null;
-    const padded =
-      b64.replace(/-/g, "+").replace(/_/g, "/") +
-      "=".repeat((4 - (b64.length % 4)) % 4);
-    return JSON.parse(atob(padded)) as T;
-  } catch {
-    return null;
+  if (!bffSession || bffSession.session.status !== "ACTIVE") {
+    redirect(`/${locale}/login?error=session_store_unavailable`);
   }
-}
 
-type TenantApiBody = { data?: { id: string; name: string; slug: string } };
+  const secure = isSecure();
+  const destination = pkce.returnTo ?? `/${locale}/console`;
 
-async function resolveTenantsFromToken(
-  accessToken: string,
-  civisCoreUrl: string,
-): Promise<StoredTenant[]> {
-  const claims = parseJwt<CasAccessTokenClaims>(accessToken);
-  if (!claims?.tenant_memberships?.length) return [];
-
-  const results = await Promise.allSettled(
-    claims.tenant_memberships
-      .filter((m) => m.status !== "INACTIVE")
-      .map(async (m): Promise<StoredTenant> => {
-        const fallback: StoredTenant = {
-          id: m.tenant_id,
-          name: m.tenant_id,
-          slug: m.tenant_id,
-        };
-
-        const res = await fetch(
-          `${civisCoreUrl}/platform/api/v1/tenants/${m.tenant_id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              Accept: "application/json",
-            },
-          },
-        ).catch(() => null);
-
-        if (!res?.ok) return fallback;
-
-        const body = (await res.json()) as TenantApiBody;
-        const d = body.data;
-        return d ? { id: d.id, name: d.name, slug: d.slug } : fallback;
-      }),
+  const securePart = secure ? "; Secure" : "";
+  const headers = new Headers({
+    Location: new URL(destination, baseUrl).toString(),
+  });
+  headers.append(
+    "Set-Cookie",
+    `${SESSION_COOKIE_NAME}=${bffSession.handle}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_COOKIE_MAX_AGE_SECONDS}${securePart}`,
+  );
+  const tenantCtxId =
+    activeTenantId ?? (tenants.length === 1 ? tenants[0]?.id : undefined);
+  if (tenantCtxId) {
+    const tenantCtxValue = await encodeTenantCtxCookie(
+      tenantCtxId,
+      sessionSecret,
+    );
+    headers.append(
+      "Set-Cookie",
+      `${TENANT_CTX_COOKIE_NAME}=${tenantCtxValue}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${TENANT_CTX_COOKIE_MAX_AGE}${securePart}`,
+    );
+  }
+  // Clean up PKCE cookie
+  headers.append(
+    "Set-Cookie",
+    `${PKCE_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
   );
 
-  return results
-    .filter((r) => r.status === "fulfilled")
-    .map((r) => (r as PromiseFulfilledResult<StoredTenant>).value);
+  void cookieStore;
+  return new Response(null, { status: 307, headers });
 }

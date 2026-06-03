@@ -26,7 +26,13 @@ const ACCESS_TOKEN = fakeJwt({
   user_id: "user-uuid-1",
   platform_roles: [],
   tenant_memberships: [
-    { tenant_id: "t1", roles: ["TENANT_OWNER"], status: "ACTIVE", mfa_required: false, password_policy: "STANDARD" },
+    {
+      tenant_id: "t1",
+      roles: ["TENANT_OWNER"],
+      status: "ACTIVE",
+      mfa_required: false,
+      password_policy: "STANDARD",
+    },
   ],
   iss: "http://localhost:9000",
   aud: "civis-core",
@@ -39,6 +45,42 @@ const PLATFORM_ADMIN_ACCESS_TOKEN = fakeJwt({
   identity_type: "USER",
   user_id: "admin-uuid-1",
   platform_roles: ["PLATFORM_SUPER_ADMIN"],
+  tenant_memberships: [],
+  iss: "http://localhost:9000",
+  aud: "civis-core",
+  exp: NOW_SECONDS + 3600,
+  iat: NOW_SECONDS,
+});
+
+const LOWERCASE_PLATFORM_ADMIN_ACCESS_TOKEN = fakeJwt({
+  sub: "civis-auth|admin-2",
+  identity_type: "USER",
+  user_id: "admin-uuid-2",
+  platform_roles: ["platform_admin"],
+  tenant_memberships: [],
+  iss: "http://localhost:9000",
+  aud: "civis-core",
+  exp: NOW_SECONDS + 3600,
+  iat: NOW_SECONDS,
+});
+
+const PLATFORM_IMPLEMENTATION_ACCESS_TOKEN = fakeJwt({
+  sub: "civis-auth|impl-1",
+  identity_type: "USER",
+  user_id: "impl-uuid-1",
+  platform_roles: ["PLATFORM_IMPLEMENTATION"],
+  tenant_memberships: [],
+  iss: "http://localhost:9000",
+  aud: "civis-core",
+  exp: NOW_SECONDS + 3600,
+  iat: NOW_SECONDS,
+});
+
+const PLATFORM_READ_ONLY_ACCESS_TOKEN = fakeJwt({
+  sub: "civis-auth|reader-1",
+  identity_type: "USER",
+  user_id: "reader-uuid-1",
+  platform_roles: ["PLATFORM_READ_ONLY"],
   tenant_memberships: [],
   iss: "http://localhost:9000",
   aud: "civis-core",
@@ -61,7 +103,9 @@ const TENANTS = [{ id: "t1", name: "Acme Corp", slug: "acme" }];
 
 const SESSION_SECRET = "test-session-secret-32chars-padded";
 
-async function buildCookie(overrides?: Partial<SessionPayload>): Promise<string> {
+async function buildCookie(
+  overrides?: Partial<SessionPayload>,
+): Promise<string> {
   const payload: SessionPayload = {
     at: ACCESS_TOKEN,
     it: ID_TOKEN,
@@ -103,8 +147,12 @@ vi.mock("@repo/platform", () => ({
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe("getSession()", () => {
-  beforeEach(() => { mockCookieValue = undefined; });
-  afterEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    mockCookieValue = undefined;
+  });
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
 
   it("returns anonymous session when no cookie is present", async () => {
     const { getSession } = await import("./session");
@@ -150,6 +198,43 @@ describe("getSession()", () => {
     expect(session.permissions).toContain("admin:write");
     expect(session.permissions).toContain("billing:read");
     expect(session.permissions).toContain("console:read");
+    expect(session.permissions).toContain("control-panel:write");
+  });
+
+  it("maps lowercase platform_* roles to platform permissions", async () => {
+    mockCookieValue = await buildCookie({
+      at: LOWERCASE_PLATFORM_ADMIN_ACCESS_TOKEN,
+      tenants: [],
+    });
+    const { getSession } = await import("./session");
+    const session = await getSession();
+    expect(session.roles).toContain("platform_admin");
+    expect(session.permissions).toContain("control-panel:read");
+    expect(session.permissions).toContain("control-panel:write");
+    expect(session.permissions).toContain("admin:write");
+  });
+
+  it("maps PLATFORM_IMPLEMENTATION to onboarding permissions", async () => {
+    mockCookieValue = await buildCookie({
+      at: PLATFORM_IMPLEMENTATION_ACCESS_TOKEN,
+      tenants: [],
+    });
+    const { getSession } = await import("./session");
+    const session = await getSession();
+    expect(session.permissions).toContain("control-panel:read");
+    expect(session.permissions).toContain("control-panel:write");
+    expect(session.permissions).toContain("settings:read");
+  });
+
+  it("maps PLATFORM_READ_ONLY to read-only control panel access", async () => {
+    mockCookieValue = await buildCookie({
+      at: PLATFORM_READ_ONLY_ACCESS_TOKEN,
+      tenants: [],
+    });
+    const { getSession } = await import("./session");
+    const session = await getSession();
+    expect(session.permissions).toContain("control-panel:read");
+    expect(session.permissions).not.toContain("control-panel:write");
   });
 
   it("populates availableTenants from the session payload", async () => {
@@ -201,7 +286,9 @@ describe("getSession()", () => {
 });
 
 describe("getSession() mock bypass", () => {
-  afterEach(() => { vi.clearAllMocks(); });
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
 
   it("returns mock session when USE_MOCK_SESSION=true", async () => {
     // Temporarily override the getEnv mock to return "true" for USE_MOCK_SESSION

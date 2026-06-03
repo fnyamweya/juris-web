@@ -4,7 +4,9 @@ import { CivisApiError } from "./error";
 import { createHttp } from "./http";
 import { createAuthConfigResource } from "./resources/auth-config";
 import { createMembersResource } from "./resources/members";
+import { createPoliciesResource } from "./resources/policies";
 import { createRolesResource } from "./resources/roles";
+import { createTenantContextResource } from "./resources/tenant-context";
 import { createTenantsResource } from "./resources/tenants";
 import { createUsersResource } from "./resources/users";
 
@@ -21,6 +23,8 @@ function buildClient(accessToken: string, civisCoreUrl: string, tenantId?: strin
     users: createUsersResource(http),
     members: createMembersResource(http),
     authConfig: createAuthConfigResource(http),
+    tenantContext: createTenantContextResource(http),
+    policies: createPoliciesResource(http),
     roles: createRolesResource(http),
   };
 }

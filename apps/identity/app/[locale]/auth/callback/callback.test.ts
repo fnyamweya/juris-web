@@ -1,14 +1,10 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-  type Mock,
-} from "vitest";
-import { encodePkceState, encodeSessionCookie, SESSION_COOKIE_NAME, PKCE_COOKIE_NAME } from "@repo/auth";
-import type { PkcePayload, SessionPayload } from "@repo/auth";
+  encodePkceState,
+  SESSION_COOKIE_NAME,
+  PKCE_COOKIE_NAME,
+} from "@repo/auth";
+import type { PkcePayload } from "@repo/auth";
 import { NextRequest } from "next/server";
 
 // ─── Shared test data ────────────────────────────────────────────────────────
@@ -37,7 +33,13 @@ const VALID_ACCESS_TOKEN = fakeJwt({
   identity_type: "USER",
   platform_roles: [],
   tenant_memberships: [
-    { tenant_id: "t1", roles: ["TENANT_OWNER"], status: "ACTIVE", mfa_required: false, password_policy: "STANDARD" },
+    {
+      tenant_id: "t1",
+      roles: ["TENANT_OWNER"],
+      status: "ACTIVE",
+      mfa_required: false,
+      password_policy: "STANDARD",
+    },
   ],
 });
 
@@ -80,7 +82,8 @@ vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => cookieStore),
 }));
 
-const redirectMock = vi.fn<[string], never>(() => {
+const redirectMock = vi.fn((url: string): never => {
+  void url;
   throw new Error("NEXT_REDIRECT");
 });
 
@@ -97,7 +100,8 @@ vi.mock("@repo/platform", () => ({
       CAS_BFF_CLIENT_SECRET: "client-secret",
       JURIS_BASE_URL: "http://localhost:3000",
     };
-    if (envs[key]) return envs[key]!;
+    const value = envs[key];
+    if (value) return value;
     throw new Error(`requireEnv: missing ${key}`);
   }),
   getEnv: vi.fn((key: string): string | undefined => {
@@ -127,8 +131,8 @@ async function setPkceCookie(pkce: PkcePayload = VALID_PKCE) {
 }
 
 function mockTokenExchangeSuccess() {
-  const now = Math.floor(Date.now() / 1000);
-  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+  vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(
     new Response(
       JSON.stringify({
         access_token: VALID_ACCESS_TOKEN,
@@ -140,7 +144,30 @@ function mockTokenExchangeSuccess() {
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     ),
-  );
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: { tenantId: "t1", displayName: "Acme", slug: "acme" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    )
+    .mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            handle: "opaque-session-handle",
+            session: {
+              status: "ACTIVE",
+              payload: null,
+              metadata: { subject: "civis-auth|u1", userId: "u1" },
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
 }
 
 function mockTokenExchangeFailure(error = "invalid_grant") {
@@ -150,6 +177,19 @@ function mockTokenExchangeFailure(error = "invalid_grant") {
       { status: 400, headers: { "Content-Type": "application/json" } },
     ),
   );
+}
+
+function setCookieHeaders(response: Response): string[] {
+  const headers = response.headers as Headers & {
+    getSetCookie?: () => string[];
+  };
+  return headers.getSetCookie?.() ?? [response.headers.get("set-cookie") ?? ""];
+}
+
+function cookieValue(response: Response, name: string): string | undefined {
+  const joined = setCookieHeaders(response).join("\n");
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return joined.match(new RegExp(`${escaped}=([^;\\n]*)`))?.[1];
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -199,7 +239,9 @@ describe("GET /[locale]/auth/callback", () => {
     await expect(
       GET(request, { params: Promise.resolve({ locale: "en" }) }),
     ).rejects.toThrow("NEXT_REDIRECT");
-    expect(redirectMock).toHaveBeenCalledWith("/en/login?error=session_expired");
+    expect(redirectMock).toHaveBeenCalledWith(
+      "/en/login?error=session_expired",
+    );
   });
 
   it("redirects to login and clears PKCE cookie on state mismatch", async () => {
@@ -233,37 +275,42 @@ describe("GET /[locale]/auth/callback", () => {
     mockTokenExchangeSuccess();
     const { GET } = await import("./route");
     const request = buildRequest("valid-code", VALID_PKCE.state);
-    await expect(
-      GET(request, { params: Promise.resolve({ locale: "en" }) }),
-    ).rejects.toThrow("NEXT_REDIRECT");
+    const response = await GET(request, {
+      params: Promise.resolve({ locale: "en" }),
+    });
+    expect(response.status).toBe(307);
 
     // PKCE cookie cleared
     expect(cookieStore.get(PKCE_COOKIE_NAME)).toBeUndefined();
 
-    // Session cookie written
-    const sessionRaw = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    expect(sessionRaw).toBeTruthy();
-
-    // Session cookie decodes to valid payload
-    const { decodeSessionCookie } = await import("@repo/auth");
-    const payload = await decodeSessionCookie(sessionRaw!, SECRET);
-    expect(payload).not.toBeNull();
-    expect(payload!.rt).toBe("rt-opaque");
+    // Session cookie written as an opaque handle
+    const sessionRaw = cookieValue(response, SESSION_COOKIE_NAME);
+    expect(sessionRaw).toBe("opaque-session-handle");
 
     // Redirected to returnTo from PKCE payload
-    expect(redirectMock).toHaveBeenCalledWith(VALID_PKCE.returnTo);
+    expect(response.headers.get("location")).toBe(
+      `http://localhost:3000${VALID_PKCE.returnTo}`,
+    );
   });
 
   it("redirects to /{locale}/console when returnTo is absent in PKCE state", async () => {
-    const pkceWithoutReturnTo: PkcePayload = { ...VALID_PKCE, returnTo: undefined };
+    const pkceWithoutReturnTo: PkcePayload = {
+      state: VALID_PKCE.state,
+      nonce: VALID_PKCE.nonce,
+      codeVerifier: VALID_PKCE.codeVerifier,
+      locale: VALID_PKCE.locale,
+    };
     await setPkceCookie(pkceWithoutReturnTo);
     mockTokenExchangeSuccess();
     const { GET } = await import("./route");
     const request = buildRequest("code", VALID_PKCE.state);
-    await expect(
-      GET(request, { params: Promise.resolve({ locale: "en" }) }),
-    ).rejects.toThrow("NEXT_REDIRECT");
-    expect(redirectMock).toHaveBeenCalledWith("/en/console");
+    const response = await GET(request, {
+      params: Promise.resolve({ locale: "en" }),
+    });
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:3000/en/console",
+    );
   });
 
   it("token exchange POST is called with correct parameters", async () => {
@@ -271,9 +318,10 @@ describe("GET /[locale]/auth/callback", () => {
     mockTokenExchangeSuccess();
     const { GET } = await import("./route");
     const request = buildRequest("auth-code-xyz", VALID_PKCE.state);
-    await expect(
-      GET(request, { params: Promise.resolve({ locale: "en" }) }),
-    ).rejects.toThrow("NEXT_REDIRECT");
+    const response = await GET(request, {
+      params: Promise.resolve({ locale: "en" }),
+    });
+    expect(response.status).toBe(307);
 
     const fetchCall = vi.mocked(fetch).mock.calls[0];
     expect(fetchCall?.[0]).toContain("/oauth2/token");
@@ -281,6 +329,8 @@ describe("GET /[locale]/auth/callback", () => {
     expect(body.get("grant_type")).toBe("authorization_code");
     expect(body.get("code")).toBe("auth-code-xyz");
     expect(body.get("code_verifier")).toBe(VALID_PKCE.codeVerifier);
-    expect(body.get("redirect_uri")).toBe("http://localhost:3000/en/auth/callback");
+    expect(body.get("redirect_uri")).toBe(
+      "http://localhost:3000/en/auth/callback",
+    );
   });
 });

@@ -10,12 +10,27 @@ const NOW = Math.floor(Date.now() / 1000);
 
 function fakeJwt(payload: Record<string, unknown>): string {
   const enc = (o: unknown) =>
-    btoa(JSON.stringify(o)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+    btoa(JSON.stringify(o))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
   return `${enc({ alg: "RS256" })}.${enc({ ...payload, exp: NOW + 3600 })}.sig`;
 }
 
+function fetchUrl(input: Parameters<typeof fetch>[0]): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
+}
+
 const VALID_SESSION: SessionPayload = {
-  at: fakeJwt({ sub: "u1", user_id: "u1", identity_type: "USER", platform_roles: [], tenant_memberships: [] }),
+  at: fakeJwt({
+    sub: "u1",
+    user_id: "u1",
+    identity_type: "USER",
+    platform_roles: [],
+    tenant_memberships: [],
+  }),
   it: fakeJwt({ sub: "u1", name: "Test", email: "test@example.com" }),
   rt: "refresh-token-to-revoke",
   exp: NOW + 3600,
@@ -30,8 +45,12 @@ const cookieStore = {
     const v = this.values.get(name);
     return v !== undefined ? { value: v } : undefined;
   },
-  delete(name: string) { this.values.delete(name); },
-  clear() { this.values.clear(); },
+  delete(name: string) {
+    this.values.delete(name);
+  },
+  clear() {
+    this.values.clear();
+  },
 };
 
 vi.mock("next/headers", () => ({
@@ -49,7 +68,8 @@ vi.mock("@repo/platform", () => ({
       CAS_BFF_CLIENT_ID: "client-id",
       CAS_BFF_CLIENT_SECRET: "client-secret",
     };
-    if (envs[key]) return envs[key]!;
+    const value = envs[key];
+    if (value) return value;
     throw new Error(`requireEnv: missing ${key}`);
   }),
 }));
@@ -74,7 +94,9 @@ describe("GET /api/auth/logout", () => {
     cookieStore.values.set(SESSION_COOKIE_NAME, encoded);
 
     const { GET } = await import("./route");
-    const req = new NextRequest("http://localhost:3000/api/auth/logout?locale=en");
+    const req = new NextRequest(
+      "http://localhost:3000/api/auth/logout?locale=en",
+    );
     const response = await GET(req);
 
     expect(response.status).toBe(302);
@@ -87,12 +109,14 @@ describe("GET /api/auth/logout", () => {
     cookieStore.values.set(SESSION_COOKIE_NAME, encoded);
 
     const { GET } = await import("./route");
-    const req = new NextRequest("http://localhost:3000/api/auth/logout?locale=en");
+    const req = new NextRequest(
+      "http://localhost:3000/api/auth/logout?locale=en",
+    );
     await GET(req);
 
-    const revokeCall = vi.mocked(fetch).mock.calls.find(
-      ([url]) => String(url).includes("/oauth2/revoke"),
-    );
+    const revokeCall = vi
+      .mocked(fetch)
+      .mock.calls.find(([url]) => fetchUrl(url).includes("/oauth2/revoke"));
     expect(revokeCall).toBeTruthy();
     const body = new URLSearchParams(revokeCall![1]?.body as string);
     expect(body.get("token")).toBe("refresh-token-to-revoke");
@@ -101,15 +125,17 @@ describe("GET /api/auth/logout", () => {
 
   it("still redirects and clears cookie when no session cookie exists", async () => {
     const { GET } = await import("./route");
-    const req = new NextRequest("http://localhost:3000/api/auth/logout?locale=sw");
+    const req = new NextRequest(
+      "http://localhost:3000/api/auth/logout?locale=sw",
+    );
     const response = await GET(req);
 
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toContain("/sw/logout");
     // No fetch calls to CAS since there was no session
-    const revokeCalls = vi.mocked(fetch).mock.calls.filter(
-      ([url]) => String(url).includes("/oauth2/revoke"),
-    );
+    const revokeCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter(([url]) => fetchUrl(url).includes("/oauth2/revoke"));
     expect(revokeCalls).toHaveLength(0);
   });
 
@@ -126,7 +152,9 @@ describe("GET /api/auth/logout", () => {
     cookieStore.values.set(SESSION_COOKIE_NAME, encoded);
 
     const { GET } = await import("./route");
-    const req = new NextRequest("http://localhost:3000/api/auth/logout?locale=en");
+    const req = new NextRequest(
+      "http://localhost:3000/api/auth/logout?locale=en",
+    );
     const response = await GET(req);
 
     expect(response.status).toBe(302);

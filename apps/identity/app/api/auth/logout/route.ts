@@ -1,7 +1,10 @@
 import {
   decodeSessionCookie,
+  readBffSession,
+  revokeBffSession,
   revokeToken,
   SESSION_COOKIE_NAME,
+  TENANT_CTX_COOKIE_NAME,
 } from "@repo/auth";
 import { getEnv, requireEnv } from "@repo/platform";
 import { cookies } from "next/headers";
@@ -18,30 +21,43 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   if (sessionRaw) {
     const secret = getEnv("SESSION_SECRET");
+    let refreshToken: string | null = null;
     if (secret) {
       const payload = await decodeSessionCookie(sessionRaw, secret);
 
-      // Capture the id_token before clearing — needed for OIDC end-session hint
       idToken = payload?.it ?? null;
+      refreshToken = payload?.rt ?? null;
+    }
 
-      if (payload?.rt) {
-        const casUrl = requireEnv("CAS_ISSUER_URL");
-        const clientId = requireEnv("CAS_BFF_CLIENT_ID");
-        const clientSecret = requireEnv("CAS_BFF_CLIENT_SECRET");
+    if (!idToken && !refreshToken) {
+      const bffSession = await readBffSession(sessionRaw, false);
+      idToken = bffSession.payload?.it ?? null;
+      refreshToken = bffSession.payload?.rt ?? null;
+      await revokeBffSession(sessionRaw).catch(() => {
+        // Best-effort — always clear local session even if revocation fails
+      });
+    }
 
-        await revokeToken({
-          casUrl,
-          clientId,
-          clientSecret,
-          token: payload.rt,
-          tokenTypeHint: "refresh_token",
-        }).catch(() => {
-          // Best-effort — always clear local session even if revocation fails
-        });
-      }
+    if (refreshToken) {
+      const casUrl = requireEnv("CAS_ISSUER_URL");
+      const clientId = requireEnv("CAS_BFF_CLIENT_ID");
+      const clientSecret = requireEnv("CAS_BFF_CLIENT_SECRET");
+
+      await revokeToken({
+        casUrl,
+        clientId,
+        clientSecret,
+        token: refreshToken,
+        tokenTypeHint: "refresh_token",
+      }).catch(() => {
+        // Best-effort — always clear local session even if revocation fails
+      });
     }
 
     cookieStore.delete(SESSION_COOKIE_NAME);
+    // Clear tenant-ctx so the next login shows the identifier step (fresh start),
+    // not the credential step for the previous tenant with potentially wrong providers.
+    cookieStore.delete(TENANT_CTX_COOKIE_NAME);
   }
 
   // Propagate logout to CAS via OIDC RP-Initiated Logout so the CAS session
