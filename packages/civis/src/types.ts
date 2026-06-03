@@ -1,4 +1,136 @@
-// ─── Shared pagination ────────────────────────────────────────────────────────
+// ─── User preferences ─────────────────────────────────────────────────────────
+
+export type ThemePreference = "light" | "dark" | "system";
+export type DensityPreference = "compact" | "comfortable" | "spacious";
+export type FontSizePreference = "sm" | "md" | "lg" | "xl";
+
+export type AppearancePreferences = {
+  theme: ThemePreference;
+  density: DensityPreference;
+  fontSize: FontSizePreference;
+  reduceMotion: boolean;
+  highContrast: boolean;
+};
+
+export type LocalePreferences = {
+  language: string;
+  timezone: string;
+  dateFormat: "DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD";
+  numberFormat: "eu" | "us";
+  currency: string;
+};
+
+export type MarketingPreferences = {
+  emailMarketing: boolean;
+  productUpdates: boolean;
+  researchInvitations: boolean;
+  partnerOffers: boolean;
+};
+
+export type PrivacyPreferences = {
+  analytics: boolean;
+  crashReporting: boolean;
+  performanceMonitoring: boolean;
+  personalization: boolean;
+};
+
+export type MfaMethodPreference = "totp" | "webauthn" | null;
+
+export type MfaPreferences = {
+  preferredMethod: MfaMethodPreference;
+  rememberDeviceDays: number;
+};
+
+export type UserPreferences = {
+  appearance: AppearancePreferences;
+  locale: LocalePreferences;
+  marketing: MarketingPreferences;
+  privacy: PrivacyPreferences;
+  mfa: MfaPreferences;
+  updatedAt: string | null;
+};
+
+export type NotificationDigestFrequency = "instant" | "hourly" | "daily" | "weekly" | "none";
+
+export type NotificationChannels = {
+  email: boolean;
+  sms: boolean;
+  push: boolean;
+  whatsapp: boolean;
+};
+
+export type NotificationDigest = {
+  frequency: NotificationDigestFrequency;
+  hourUtc: number;
+};
+
+export type NotificationCategories = {
+  securityAlerts: boolean;
+  memberEvents: boolean;
+  billingEvents: boolean;
+  systemAnnouncements: boolean;
+  customEvents: boolean;
+};
+
+export type NotificationPreferences = {
+  channels: NotificationChannels;
+  digest: NotificationDigest;
+  categories: NotificationCategories;
+};
+
+export type LocalizationPreferences = {
+  dateFormat: "DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD";
+  numberFormat: "eu" | "us";
+  currencyDisplay: "code" | "symbol";
+  firstDayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+};
+
+export type UserTenantPreferences = {
+  notifications: NotificationPreferences;
+  localization: LocalizationPreferences;
+  updatedAt: string | null;
+};
+
+export type TermsAcceptance = {
+  id: string;
+  termsVersion: string;
+  acceptedAt: string;
+  locale: string | null;
+  channel: string;
+};
+
+export type TermsStatus = {
+  latest: TermsAcceptance | null;
+  history: TermsAcceptance[];
+};
+
+export type ActiveSession = {
+  id: string;
+  tenantId: string | null;
+  status: string;
+  createdAt: string;
+  lastActivityAt: string;
+  accessTokenExpiresAt: string;
+  absoluteExpiresAt: string;
+  clientIp: string | null;
+  userAgentHash: string | null;
+  amr: string[];
+  acr: string | null;
+  mfaCompletedAt: string | null;
+  idleTimeoutSeconds: number;
+};
+
+export type TrustedDevice = {
+  id: string;
+  label: string;
+  trustedAt: string;
+  expiresAt: string;
+  lastSeenAt: string | null;
+  lastIp: string | null;
+  userAgentHint: string | null;
+};
+
+// ─── Shared pagination ─────────────────────────────────────────────────────────
 
 export type CursorPage<T> = {
   data: T[];

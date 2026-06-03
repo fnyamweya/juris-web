@@ -1,129 +1,108 @@
-import { createTranslator } from "next-intl";
-import { getMessages } from "@repo/i18n";
 import type { Locale } from "@repo/i18n";
 import { requirePermission } from "@repo/auth";
 import {
   AppShell,
   Breadcrumb,
-  Button,
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-  DataTable,
   PageHeader,
 } from "@repo/ui";
-import { preferences } from "@/mock-data";
+import Link from "next/link";
+import { getSettingsNavItems } from "@/lib/navigation";
 
-function getNavItems(locale: string) {
-  return [
-    {
-      label: "Console",
-      href: "/" + locale + "/console",
-      permission: "console:read",
-    },
-    {
-      label: "Admin",
-      href: "/" + locale + "/admin",
-      permission: "admin:read",
-    },
-    {
-      label: "Billing",
-      href: "/" + locale + "/billing",
-      permission: "billing:read",
-    },
-    {
-      label: "Reports",
-      href: "/" + locale + "/reports",
-      permission: "reporting:read",
-    },
-    {
-      label: "Settings",
-      href: "/" + locale + "/settings",
-      permission: "settings:read",
-    },
-    {
-      label: "Support",
-      href: "/" + locale + "/support",
-      permission: "support:read",
-    },
-  ];
-}
+const SETTINGS_SECTIONS = (locale: string) => [
+  {
+    title: "Preferences",
+    description: "Appearance, language, timezone, and regional formatting.",
+    href: `/${locale}/settings/preferences`,
+    permission: "settings:read",
+  },
+  {
+    title: "Security",
+    description: "MFA methods, active sessions, and trusted devices.",
+    href: `/${locale}/settings/security`,
+    permission: "settings:read",
+  },
+  {
+    title: "Notifications",
+    description: "Delivery channels, digest schedule, and event categories.",
+    href: `/${locale}/settings/notifications`,
+    permission: "settings:read",
+  },
+  {
+    title: "Privacy",
+    description: "Marketing opt-ins, telemetry controls, and T&C history.",
+    href: `/${locale}/settings/privacy`,
+    permission: "settings:read",
+  },
+  {
+    title: "Profile",
+    description: "Display name and account information.",
+    href: `/${locale}/settings/profile`,
+    permission: "settings:read",
+  },
+  {
+    title: "Organisation",
+    description: "Organisation-level settings and configuration.",
+    href: `/${locale}/settings/organization`,
+    permission: "settings:write",
+  },
+];
 
-function getBreadcrumb(locale: string, label: string) {
-  return (
-    <Breadcrumb
-      items={[
-        { label: "Juris", href: "/" + locale },
-        { label: "Settings" },
-        { label },
-      ]}
-    />
-  );
-}
-
-export default async function ProductPage({
+export default async function SettingsIndexPage({
   params,
 }: {
   params: Promise<{ locale: Locale }>;
 }) {
   const { locale } = await params;
-  const messages = await getMessages(locale);
-  const t = createTranslator({ locale, messages });
-  const session = await requirePermission("settings:read", { redirectTo: `/${locale}/console` });
-  const navItems = getNavItems(locale);
+  const session = await requirePermission("settings:read", {
+    redirectTo: `/${locale}/console`,
+  });
+  const sections = SETTINGS_SECTIONS(locale).filter(
+    (s) => session.permissions.includes(s.permission),
+  );
 
   return (
     <AppShell
       appName="Settings"
-      navItems={navItems}
+      navItems={getSettingsNavItems(locale)}
       user={session.user}
       tenant={session.currentTenant}
       tenants={session.availableTenants}
       locale={locale}
       session={session}
       logoutUrl={`/api/auth/logout?locale=${locale}`}
-      breadcrumb={getBreadcrumb(locale, "Settings")}
-    >
-        <PageHeader
-          title="Settings"
-          description="User and organization preferences with secure defaults."
-          actions={<Button variant="outline">{t("common.search")}</Button>}
+      breadcrumb={
+        <Breadcrumb
+          items={[
+            { label: "Juris", href: `/${locale}` },
+            { label: "Settings" },
+          ]}
         />
-        <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
-          <Card>
-            <CardHeader>
-              <CardTitle>Profile</CardTitle>
-              <CardDescription>
-                Mock profile values for local development.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <div className="grid gap-2">
-                <span className="text-sm font-medium">Name</span>
-                <span className="rounded-md border px-3 py-2 text-sm">
-                  Amara Okafor
-                </span>
-              </div>
-              <div className="grid gap-2">
-                <span className="text-sm font-medium">Email</span>
-                <span className="rounded-md border px-3 py-2 text-sm">
-                  amara.okafor@example.com
-                </span>
-              </div>
-              <Button>Save</Button>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Preferences</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DataTable columns={["key", "value"]} rows={preferences} />
-            </CardContent>
-          </Card>
-        </div>
+      }
+    >
+      <PageHeader
+        title="Settings"
+        description="Manage your personal preferences, security, and organisation settings."
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {sections.map((section) => (
+          <Link key={section.href} href={section.href} className="group block">
+            <Card className="h-full transition-shadow group-hover:shadow-md">
+              <CardHeader>
+                <CardTitle className="text-base">{section.title}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription>{section.description}</CardDescription>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
     </AppShell>
   );
 }
