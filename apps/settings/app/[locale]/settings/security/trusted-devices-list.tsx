@@ -1,8 +1,7 @@
 "use client";
 
 import type { TrustedDevice } from "@repo/civis";
-import { Button } from "@repo/ui";
-import { Input } from "@repo/ui/theme";
+import { Button, Input } from "@repo/ui";
 import { Laptop, Pencil, Trash2, X } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";

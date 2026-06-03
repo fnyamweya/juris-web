@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
   Switch,
-} from "@repo/ui/theme";
+} from "@repo/ui";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { saveNotifications } from "../actions";

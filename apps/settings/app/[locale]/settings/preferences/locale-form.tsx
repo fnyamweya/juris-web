@@ -7,7 +7,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@repo/ui/theme";
+} from "@repo/ui";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { saveLocale } from "../actions";

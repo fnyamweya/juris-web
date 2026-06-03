@@ -9,7 +9,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@repo/ui/theme";
+} from "@repo/ui";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { saveMfaPreferences } from "../actions";

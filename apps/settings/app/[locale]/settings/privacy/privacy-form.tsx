@@ -1,7 +1,7 @@
 "use client";
 
 import type { MarketingPreferences, PrivacyPreferences } from "@repo/civis";
-import { Switch } from "@repo/ui/theme";
+import { Switch } from "@repo/ui";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { saveMarketing, savePrivacy } from "../actions";
