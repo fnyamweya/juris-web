@@ -1,7 +1,7 @@
 import { createTranslator } from "next-intl";
 import { formatCurrency, getMessages } from "@repo/i18n";
 import type { Locale } from "@repo/i18n";
-import { getSession } from "@repo/auth";
+import { requirePermission } from "@repo/auth";
 import {
   AppShell,
   Breadcrumb,
@@ -12,11 +12,9 @@ import {
   CardHeader,
   CardTitle,
   DataTable,
-  EmptyState,
   PageHeader,
   StatusBadge,
 } from "@repo/ui";
-import { PermissionGate } from "@repo/ui/permission-gate";
 import { invoices, plans } from "@/mock-data";
 
 function getNavItems(locale: string) {
@@ -74,7 +72,7 @@ export default async function ProductPage({
   const { locale } = await params;
   const messages = await getMessages(locale);
   const t = createTranslator({ locale, messages });
-  const session = await getSession();
+  const session = await requirePermission("billing:read", { redirectTo: `/${locale}/console` });
   const navItems = getNavItems(locale);
 
   return (
@@ -89,16 +87,6 @@ export default async function ProductPage({
       logoutUrl={`/api/auth/logout?locale=${locale}`}
       breadcrumb={getBreadcrumb(locale, "Payment Methods")}
     >
-      <PermissionGate
-        session={session}`}
-        permission="billing:read"
-        fallback={
-          <EmptyState
-            title="Access denied"
-            description="Your mock session does not include this permission."
-          />
-        }
-      >
         <PageHeader
           title="Payment Methods"
           description="Revenue workflows with invoice, plan, and payment method visibility. This view focuses on payment methods."
@@ -144,7 +132,6 @@ export default async function ProductPage({
             />
           </CardContent>
         </Card>
-      </PermissionGate>
     </AppShell>
   );
 }

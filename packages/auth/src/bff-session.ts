@@ -132,6 +132,24 @@ export async function revokeBffSession(
   );
 }
 
+/**
+ * Force-refreshes UI permissions for all active sessions of the given user.
+ *
+ * Resets the permission epoch on every active session so the next introspect
+ * re-derives permissions from the DB. Use after role changes, suspension, or
+ * any event that requires immediate revocation without waiting for token rotation.
+ *
+ * Returns the number of sessions updated, or null if the store is unreachable.
+ */
+export async function refreshUserPermissions(
+  userId: string,
+): Promise<{ sessionsUpdated: number } | null> {
+  return postSession<{ userId: string; sessionsUpdated: number }>(
+    "/permissions/refresh",
+    { userId },
+  ).then((r) => (r ? { sessionsUpdated: r.sessionsUpdated } : null));
+}
+
 export async function ensureBffSession(
   handle: string,
   options: SessionRequestOptions = {},

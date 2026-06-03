@@ -7,8 +7,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@repo/ui";
+import { requirePermission } from "@repo/auth";
 import { ControlPanelShell } from "@/components/control-panel-shell";
-import { getControlPanelAccess } from "@/lib/access";
 import { onboardTenant } from "../server-actions";
 
 const inputClass =
@@ -24,20 +24,7 @@ export default async function TenantOnboardingPage({
   params: Promise<{ locale: Locale }>;
 }) {
   const { locale } = await params;
-  const access = await getControlPanelAccess("control-panel:write");
-  if (!access.allowed) {
-    return (
-      <ControlPanelShell
-        locale={locale}
-        breadcrumbLabel="Onboard Tenant"
-        title="Onboard Tenant"
-        description="Register the tenant, placement, owner invitation, auth policy, federation, market/org context, and policy seeds in one controlled flow."
-        permission="control-panel:write"
-      >
-        {null}
-      </ControlPanelShell>
-    );
-  }
+  await requirePermission("control-panel:write", { redirectTo: `/${locale}/console` });
 
   return (
     <ControlPanelShell

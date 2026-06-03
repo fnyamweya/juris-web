@@ -21,8 +21,8 @@ import {
   UserPlus,
 } from "lucide-react";
 import Link from "next/link";
+import { requirePermission } from "@repo/auth";
 import { ControlPanelShell } from "@/components/control-panel-shell";
-import { getControlPanelAccess } from "@/lib/access";
 import {
   fetchTenantBundle,
   formatSeconds,
@@ -64,19 +64,7 @@ export default async function TenantDetailsPage({
 }) {
   const { locale, tenantId } = await params;
   const { tab = "overview" } = await searchParams;
-  const access = await getControlPanelAccess();
-  if (!access.allowed) {
-    return (
-      <ControlPanelShell
-        locale={locale}
-        breadcrumbLabel="Tenant"
-        title="Tenant Details"
-        description="Tenant configuration, identity, placement, context, and policy controls."
-      >
-        {null}
-      </ControlPanelShell>
-    );
-  }
+  await requirePermission("control-panel:read", { redirectTo: `/${locale}/console` });
 
   const bundle = await fetchTenantBundle(tenantId);
 

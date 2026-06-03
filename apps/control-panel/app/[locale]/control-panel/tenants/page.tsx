@@ -12,8 +12,8 @@ import {
 } from "@repo/ui";
 import { Archive, PauseCircle, PlayCircle, UserPlus } from "lucide-react";
 import Link from "next/link";
+import { requirePermission } from "@repo/auth";
 import { ControlPanelShell } from "@/components/control-panel-shell";
-import { getControlPanelAccess } from "@/lib/access";
 import { fetchTenants, statusTone, tenantIdOf } from "@/lib/tenant-data";
 import { tenantLifecycleAction } from "../server-actions";
 
@@ -23,19 +23,7 @@ export default async function ControlPanelTenantsPage({
   params: Promise<{ locale: Locale }>;
 }) {
   const { locale } = await params;
-  const access = await getControlPanelAccess();
-  if (!access.allowed) {
-    return (
-      <ControlPanelShell
-        locale={locale}
-        breadcrumbLabel="Tenants"
-        title="Tenant Directory"
-        description="Create, inspect, activate, suspend, archive, and govern tenants from the platform API."
-      >
-        {null}
-      </ControlPanelShell>
-    );
-  }
+  await requirePermission("control-panel:read", { redirectTo: `/${locale}/console` });
 
   const tenants = await fetchTenants();
 

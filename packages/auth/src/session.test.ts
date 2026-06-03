@@ -173,8 +173,21 @@ describe("getSession()", () => {
     expect(session.user?.id).toBe("user-uuid-1");
   });
 
-  it("maps TENANT_OWNER role to the expected permissions", async () => {
-    mockCookieValue = await buildCookie();
+  // uiPermissions are resolved by UiBffSessionService (V61/V62) and stored in
+  // the SessionPayload — not derived client-side and not in the JWT.
+
+  it("reads TENANT_OWNER permissions from SessionPayload.uiPermissions", async () => {
+    mockCookieValue = await buildCookie({
+      uiPermissions: [
+        "billing:read",
+        "billing:write",
+        "console:read",
+        "reporting:read",
+        "settings:read",
+        "settings:write",
+        "support:read",
+      ],
+    });
     const { getSession } = await import("./session");
     const session = await getSession();
     expect(session.permissions).toContain("console:read");
@@ -187,10 +200,23 @@ describe("getSession()", () => {
     expect(session.permissions).not.toContain("admin:read");
   });
 
-  it("maps PLATFORM_SUPER_ADMIN to all permissions", async () => {
+  it("reads PLATFORM_SUPER_ADMIN permissions from SessionPayload.uiPermissions", async () => {
     mockCookieValue = await buildCookie({
       at: PLATFORM_ADMIN_ACCESS_TOKEN,
       tenants: [],
+      uiPermissions: [
+        "admin:read",
+        "admin:write",
+        "billing:read",
+        "billing:write",
+        "console:read",
+        "control-panel:read",
+        "control-panel:write",
+        "reporting:read",
+        "settings:read",
+        "settings:write",
+        "support:read",
+      ],
     });
     const { getSession } = await import("./session");
     const session = await getSession();
@@ -201,10 +227,18 @@ describe("getSession()", () => {
     expect(session.permissions).toContain("control-panel:write");
   });
 
-  it("maps lowercase platform_* roles to platform permissions", async () => {
+  it("preserves raw role casing in session.roles (normalisation happens server-side)", async () => {
     mockCookieValue = await buildCookie({
       at: LOWERCASE_PLATFORM_ADMIN_ACCESS_TOKEN,
       tenants: [],
+      uiPermissions: [
+        "admin:read",
+        "admin:write",
+        "console:read",
+        "control-panel:read",
+        "control-panel:write",
+        "reporting:read",
+      ],
     });
     const { getSession } = await import("./session");
     const session = await getSession();
@@ -214,10 +248,20 @@ describe("getSession()", () => {
     expect(session.permissions).toContain("admin:write");
   });
 
-  it("maps PLATFORM_IMPLEMENTATION to onboarding permissions", async () => {
+  it("reads PLATFORM_IMPLEMENTATION permissions from SessionPayload.uiPermissions", async () => {
     mockCookieValue = await buildCookie({
       at: PLATFORM_IMPLEMENTATION_ACCESS_TOKEN,
       tenants: [],
+      uiPermissions: [
+        "admin:read",
+        "admin:write",
+        "console:read",
+        "control-panel:read",
+        "control-panel:write",
+        "reporting:read",
+        "settings:read",
+        "support:read",
+      ],
     });
     const { getSession } = await import("./session");
     const session = await getSession();
@@ -226,10 +270,11 @@ describe("getSession()", () => {
     expect(session.permissions).toContain("settings:read");
   });
 
-  it("maps PLATFORM_READ_ONLY to read-only control panel access", async () => {
+  it("reads PLATFORM_READ_ONLY permissions from SessionPayload.uiPermissions (no write grants)", async () => {
     mockCookieValue = await buildCookie({
       at: PLATFORM_READ_ONLY_ACCESS_TOKEN,
       tenants: [],
+      uiPermissions: ["admin:read", "console:read", "control-panel:read", "reporting:read"],
     });
     const { getSession } = await import("./session");
     const session = await getSession();

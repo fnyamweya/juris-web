@@ -38,111 +38,6 @@ function parseJwtPayload<T>(token: string): T | null {
   }
 }
 
-// ─── Role → permission mapping ────────────────────────────────────────────
-
-const ALL_PERMISSIONS = [
-  "console:read",
-  "admin:read",
-  "admin:write",
-  "control-panel:read",
-  "control-panel:write",
-  "billing:read",
-  "billing:write",
-  "reporting:read",
-  "settings:read",
-  "settings:write",
-  "support:read",
-] as const;
-
-const PLATFORM_ROLE_PERMISSIONS: Record<string, string[]> = {
-  PLATFORM_SUPER_ADMIN: [...ALL_PERMISSIONS],
-  PLATFORM_ADMIN: [
-    "console:read",
-    "admin:read",
-    "admin:write",
-    "control-panel:read",
-    "control-panel:write",
-    "reporting:read",
-  ],
-  PLATFORM_IMPLEMENTATION: [
-    "console:read",
-    "admin:read",
-    "admin:write",
-    "control-panel:read",
-    "control-panel:write",
-    "reporting:read",
-    "settings:read",
-    "support:read",
-  ],
-  PLATFORM_READ_ONLY: [
-    "console:read",
-    "admin:read",
-    "control-panel:read",
-    "reporting:read",
-  ],
-  PLATFORM_SUPPORT: ["control-panel:read", "support:read"],
-  PLATFORM_SECURITY: ["control-panel:read"],
-};
-
-const TENANT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  TENANT_OWNER: [
-    "console:read",
-    "billing:read",
-    "billing:write",
-    "settings:read",
-    "settings:write",
-    "support:read",
-    "reporting:read",
-  ],
-  TENANT_ADMIN: [
-    "console:read",
-    "settings:read",
-    "settings:write",
-    "support:read",
-    "reporting:read",
-  ],
-  TENANT_BILLING: ["console:read", "billing:read", "billing:write"],
-  TENANT_SUPPORT: ["console:read", "support:read"],
-  TENANT_MEMBER: ["console:read"],
-};
-
-function normalizeRoleId(role: string): string {
-  return role
-    .trim()
-    .replace(/[-:\s]+/g, "_")
-    .toUpperCase();
-}
-
-function derivePermissions(
-  platformRoles: string[],
-  tenantRoles: string[],
-): string[] {
-  const set = new Set<string>();
-
-  for (const role of platformRoles) {
-    const roleId = normalizeRoleId(role);
-    if (roleId.startsWith("PLATFORM_")) {
-      set.add("control-panel:read");
-    }
-    for (const perm of PLATFORM_ROLE_PERMISSIONS[roleId] ?? []) {
-      set.add(perm);
-    }
-  }
-
-  for (const role of tenantRoles) {
-    const roleId = normalizeRoleId(role);
-    for (const perm of TENANT_ROLE_PERMISSIONS[roleId] ?? []) {
-      set.add(perm);
-    }
-  }
-
-  if (set.size === 0) {
-    set.add("console:read");
-  }
-
-  return [...set];
-}
-
 // ─── Session construction from decrypted payload ──────────────────────────
 
 function buildSession(payload: SessionPayload): Session {
@@ -188,7 +83,7 @@ function buildSession(payload: SessionPayload): Session {
     ...(currentTenant !== undefined ? { currentTenant } : {}),
     availableTenants,
     roles: allRoles,
-    permissions: derivePermissions(platformRoles, tenantRoles),
+    permissions: payload.uiPermissions ?? [],
     expiresAt: new Date(payload.exp * 1000).toISOString(),
   };
 }

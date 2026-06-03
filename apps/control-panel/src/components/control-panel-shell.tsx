@@ -1,7 +1,6 @@
-import { getSession } from "@repo/auth";
+import { requirePermission } from "@repo/auth";
 import type { Locale } from "@repo/i18n";
-import { AppShell, EmptyState, PageHeader, type StateAction } from "@repo/ui";
-import { PermissionGate } from "@repo/ui/permission-gate";
+import { AppShell, PageHeader, type StateAction } from "@repo/ui";
 import type { ReactNode } from "react";
 import {
   getControlPanelBreadcrumb,
@@ -14,11 +13,20 @@ type ControlPanelShellProps = {
   title: string;
   description: string;
   action?: ReactNode;
+  /**
+   * Minimum permission required to view this page.
+   * Defaults to "control-panel:read".
+   * Pages that need write access pass "control-panel:write".
+   */
   permission?: string;
-  deniedAction?: StateAction;
   children: ReactNode;
 };
 
+/**
+ * Server Component shell for all control-panel pages.
+ * Calls requirePermission so any page using this shell is automatically
+ * gated — defense-in-depth even when a page omits its own check.
+ */
 export async function ControlPanelShell({
   locale,
   breadcrumbLabel,
@@ -26,10 +34,11 @@ export async function ControlPanelShell({
   description,
   action,
   permission = "control-panel:read",
-  deniedAction,
   children,
 }: ControlPanelShellProps) {
-  const session = await getSession();
+  const session = await requirePermission(permission, {
+    redirectTo: `/${locale}/console`,
+  });
 
   return (
     <AppShell
@@ -44,20 +53,8 @@ export async function ControlPanelShell({
       breadcrumb={getControlPanelBreadcrumb(locale, breadcrumbLabel)}
       logoutUrl={`/api/auth/logout?locale=${locale}`}
     >
-      <PermissionGate
-        session={session}
-        permission={permission}
-        fallback={
-          <EmptyState
-            title="Access denied"
-            description="Platform control is available only to platform roles."
-            {...(deniedAction ? { action: deniedAction } : {})}
-          />
-        }
-      >
-        <PageHeader title={title} description={description} actions={action} />
-        {children}
-      </PermissionGate>
+      <PageHeader title={title} description={description} actions={action} />
+      {children}
     </AppShell>
   );
 }

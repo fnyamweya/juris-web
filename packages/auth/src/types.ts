@@ -102,6 +102,12 @@ export type SessionPayload = {
    * at callback time. Absent for platform-level (no-tenant) sessions.
    */
   activeTenantId?: string;
+  /**
+   * UI module permission strings resolved from `ui_module_role_permissions`
+   * by UiBffSessionService at session create / token refresh time.
+   * Absent on legacy encrypted-cookie sessions; those yield no permissions.
+   */
+  uiPermissions?: string[];
 };
 
 // ─── Server-side BFF session store ─────────────────────────────────────────

@@ -17,8 +17,8 @@ import {
   RegionBarChart,
   TenantStatusChart,
 } from "@/components/tenant-charts";
+import { requirePermission } from "@repo/auth";
 import { ControlPanelShell } from "@/components/control-panel-shell";
-import { getControlPanelAccess } from "@/lib/access";
 import { fetchTenants, statusTone, tenantIdOf } from "@/lib/tenant-data";
 
 export default async function ControlPanelOverviewPage({
@@ -27,19 +27,7 @@ export default async function ControlPanelOverviewPage({
   params: Promise<{ locale: Locale }>;
 }) {
   const { locale } = await params;
-  const access = await getControlPanelAccess();
-  if (!access.allowed) {
-    return (
-      <ControlPanelShell
-        locale={locale}
-        breadcrumbLabel="Overview"
-        title="Platform Control Panel"
-        description="Tenant onboarding, lifecycle risk, auth posture, and platform policy operations in one control plane."
-      >
-        {null}
-      </ControlPanelShell>
-    );
-  }
+  await requirePermission("control-panel:read", { redirectTo: `/${locale}/console` });
 
   const tenants = await fetchTenants();
 

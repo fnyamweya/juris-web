@@ -1,6 +1,6 @@
 import type { Locale } from "@repo/i18n";
 import { getMessages } from "@repo/i18n";
-import { getSession } from "@repo/auth";
+import { requirePermission } from "@repo/auth";
 import { createCivisClient, CivisApiError } from "@repo/civis";
 import type { TenantAuthConfig } from "@repo/civis";
 import {
@@ -13,11 +13,9 @@ import {
   CardHeader,
   CardTitle,
   DataTable,
-  EmptyState,
   PageHeader,
   StatusBadge,
 } from "@repo/ui";
-import { PermissionGate } from "@repo/ui/permission-gate";
 import { createTranslator } from "next-intl";
 
 const NAV = (locale: string) => [
@@ -47,7 +45,7 @@ export default async function SettingsSecurityPage({
   const { locale } = await params;
   const messages = await getMessages(locale);
   const t = createTranslator({ locale, messages });
-  const session = await getSession();
+  const session = await requirePermission("settings:read", { redirectTo: `/${locale}/console` });
   const tenantId = session.currentTenant?.id;
   const authConfig = tenantId ? await fetchAuthConfig(tenantId) : null;
 
@@ -71,16 +69,6 @@ export default async function SettingsSecurityPage({
         />
       }
     >
-      <PermissionGate
-        session={session}
-        permission="settings:read"
-        fallback={
-          <EmptyState
-            title="Access denied"
-            description="You need the settings:read permission to view security settings."
-          />
-        }
-      >
         <PageHeader
           title="Security"
           description="Authentication policy, MFA enforcement, and identity federation."
@@ -192,7 +180,6 @@ export default async function SettingsSecurityPage({
             )}
           </CardContent>
         </Card>
-      </PermissionGate>
     </AppShell>
   );
 }

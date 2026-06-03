@@ -1,7 +1,7 @@
 import { createTranslator } from "next-intl";
 import { getMessages } from "@repo/i18n";
 import type { Locale } from "@repo/i18n";
-import { getSession } from "@repo/auth";
+import { requirePermission } from "@repo/auth";
 import {
   AppShell,
   Breadcrumb,
@@ -12,11 +12,9 @@ import {
   CardHeader,
   CardTitle,
   DataTable,
-  EmptyState,
   PageHeader,
   StatusBadge,
 } from "@repo/ui";
-import { PermissionGate } from "@repo/ui/permission-gate";
 import { articles, tickets } from "@/mock-data";
 
 function getNavItems(locale: string) {
@@ -74,7 +72,7 @@ export default async function ProductPage({
   const { locale } = await params;
   const messages = await getMessages(locale);
   const t = createTranslator({ locale, messages });
-  const session = await getSession();
+  const session = await requirePermission("support:read", { redirectTo: `/${locale}/console` });
   const navItems = getNavItems(locale);
 
   return (
@@ -89,16 +87,6 @@ export default async function ProductPage({
       logoutUrl={`/api/auth/logout?locale=${locale}`}
       breadcrumb={getBreadcrumb(locale, "Support")}
     >
-      <PermissionGate
-        session={session}`}
-        permission="support:read"
-        fallback={
-          <EmptyState
-            title="Access denied"
-            description="Your mock session does not include this permission."
-          />
-        }
-      >
         <PageHeader
           title="Support"
           description="Ticket, knowledge base, and contact workflows for service teams."
@@ -132,7 +120,6 @@ export default async function ProductPage({
             ))}
           </div>
         </div>
-      </PermissionGate>
     </AppShell>
   );
 }

@@ -10,8 +10,8 @@ import {
   CardTitle,
   DataTable,
 } from "@repo/ui";
+import { requirePermission } from "@repo/auth";
 import { ControlPanelShell } from "@/components/control-panel-shell";
-import { getControlPanelAccess } from "@/lib/access";
 import {
   createPolicyDefinition,
   invalidatePolicyCache,
@@ -40,19 +40,7 @@ export default async function PoliciesPage({
   params: Promise<{ locale: Locale }>;
 }) {
   const { locale } = await params;
-  const access = await getControlPanelAccess();
-  if (!access.allowed) {
-    return (
-      <ControlPanelShell
-        locale={locale}
-        breadcrumbLabel="Policies"
-        title="Tenant Policy Operations"
-        description="Create tenant-scoped policy bindings, inspect cache posture, and map policy operations to tenant onboarding."
-      >
-        {null}
-      </ControlPanelShell>
-    );
-  }
+  await requirePermission("control-panel:read", { redirectTo: `/${locale}/console` });
 
   const cache = await fetchPolicyCache();
 

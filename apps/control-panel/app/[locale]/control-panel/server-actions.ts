@@ -16,9 +16,9 @@ import {
   type UpsertFederatedProviderRequest,
   type UpsertPolicyBindingRequest,
 } from "@repo/civis";
+import { refreshUserPermissions, requirePermission } from "@repo/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireControlPanelAccess } from "@/lib/access";
 
 function value(formData: FormData, key: string) {
   const raw = formData.get(key);
@@ -52,7 +52,7 @@ function jsonObject(formData: FormData, key: string) {
 }
 
 export async function onboardTenant(formData: FormData) {
-  await requireControlPanelAccess("control-panel:write");
+  await requirePermission("control-panel:write");
 
   const locale = value(formData, "locale") ?? "en";
   const client = await createCivisClient();
@@ -288,7 +288,7 @@ export async function onboardTenant(formData: FormData) {
 }
 
 export async function tenantLifecycleAction(formData: FormData) {
-  await requireControlPanelAccess("control-panel:write");
+  await requirePermission("control-panel:write");
 
   const locale = value(formData, "locale") ?? "en";
   const tenantId = value(formData, "tenantId");
@@ -305,7 +305,7 @@ export async function tenantLifecycleAction(formData: FormData) {
 }
 
 export async function inviteTenantMember(formData: FormData) {
-  await requireControlPanelAccess("control-panel:write");
+  await requirePermission("control-panel:write");
 
   const locale = value(formData, "locale") ?? "en";
   const tenantId = value(formData, "tenantId");
@@ -326,7 +326,7 @@ export async function inviteTenantMember(formData: FormData) {
 }
 
 export async function tenantMemberLifecycleAction(formData: FormData) {
-  await requireControlPanelAccess("control-panel:write");
+  await requirePermission("control-panel:write");
 
   const locale = value(formData, "locale") ?? "en";
   const tenantId = value(formData, "tenantId");
@@ -340,11 +340,14 @@ export async function tenantMemberLifecycleAction(formData: FormData) {
   if (action === "suspend") await client.members.suspend(tenantId, userId);
   if (action === "remove") await client.members.remove(tenantId, userId);
 
+  // Status changes affect what the user can access — propagate immediately.
+  await refreshUserPermissions(userId).catch(() => {});
+
   revalidatePath(`/${locale}/control-panel/tenants/${tenantId}`);
 }
 
 export async function assignTenantRole(formData: FormData) {
-  await requireControlPanelAccess("control-panel:write");
+  await requirePermission("control-panel:write");
 
   const locale = value(formData, "locale") ?? "en";
   const tenantId = value(formData, "tenantId");
@@ -358,11 +361,14 @@ export async function assignTenantRole(formData: FormData) {
   const client = await createCivisClient();
   await client.members.assignRole(tenantId, userId, roleId);
 
+  // Role change — propagate updated permissions to active sessions immediately.
+  await refreshUserPermissions(userId).catch(() => {});
+
   revalidatePath(`/${locale}/control-panel/tenants/${tenantId}`);
 }
 
 export async function updateTenantAuthPolicies(formData: FormData) {
-  await requireControlPanelAccess("control-panel:write");
+  await requirePermission("control-panel:write");
 
   const locale = value(formData, "locale") ?? "en";
   const tenantId = value(formData, "tenantId");
@@ -414,7 +420,7 @@ export async function updateTenantAuthPolicies(formData: FormData) {
 }
 
 export async function assignTenantContext(formData: FormData) {
-  await requireControlPanelAccess("control-panel:write");
+  await requirePermission("control-panel:write");
 
   const locale = value(formData, "locale") ?? "en";
   const tenantId = value(formData, "tenantId");
@@ -447,7 +453,7 @@ export async function assignTenantContext(formData: FormData) {
 }
 
 export async function upsertPolicyBinding(formData: FormData) {
-  await requireControlPanelAccess("control-panel:write");
+  await requirePermission("control-panel:write");
 
   const locale = value(formData, "locale") ?? "en";
   const tenantId = value(formData, "tenantId");
@@ -480,7 +486,7 @@ export async function upsertPolicyBinding(formData: FormData) {
 }
 
 export async function createPolicyDefinition(formData: FormData) {
-  await requireControlPanelAccess("control-panel:write");
+  await requirePermission("control-panel:write");
 
   const locale = value(formData, "locale") ?? "en";
   const policyKind = value(formData, "policyKind");
@@ -522,7 +528,7 @@ export async function createPolicyDefinition(formData: FormData) {
 }
 
 export async function policyDefinitionLifecycleAction(formData: FormData) {
-  await requireControlPanelAccess("control-panel:write");
+  await requirePermission("control-panel:write");
 
   const locale = value(formData, "locale") ?? "en";
   const policyKind = value(formData, "policyKind");
@@ -550,7 +556,7 @@ export async function policyDefinitionLifecycleAction(formData: FormData) {
 }
 
 export async function invalidatePolicyCache(formData: FormData) {
-  await requireControlPanelAccess("control-panel:write");
+  await requirePermission("control-panel:write");
 
   const locale = value(formData, "locale") ?? "en";
   const client = await createCivisClient();

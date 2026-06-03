@@ -8,8 +8,8 @@ import {
   CardTitle,
   DataTable,
 } from "@repo/ui";
+import { requirePermission } from "@repo/auth";
 import { ControlPanelShell } from "@/components/control-panel-shell";
-import { getControlPanelAccess } from "@/lib/access";
 import { tenantApiActions } from "@/lib/tenant-actions";
 
 export default async function ActionsPage({
@@ -18,19 +18,7 @@ export default async function ActionsPage({
   params: Promise<{ locale: Locale }>;
 }) {
   const { locale } = await params;
-  const access = await getControlPanelAccess();
-  if (!access.allowed) {
-    return (
-      <ControlPanelShell
-        locale={locale}
-        breadcrumbLabel="API Actions"
-        title="Tenant API Actions"
-        description="Endpoint-backed action map for tenant onboarding, lifecycle, identity, auth config, context, and policy controls."
-      >
-        {null}
-      </ControlPanelShell>
-    );
-  }
+  await requirePermission("control-panel:read", { redirectTo: `/${locale}/console` });
 
   return (
     <ControlPanelShell

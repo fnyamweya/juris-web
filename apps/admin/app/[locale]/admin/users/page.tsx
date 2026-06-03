@@ -1,6 +1,6 @@
 import type { Locale } from "@repo/i18n";
 import { getMessages } from "@repo/i18n";
-import { getSession } from "@repo/auth";
+import { requirePermission } from "@repo/auth";
 import { createCivisClient, CivisApiError } from "@repo/civis";
 import type { PlatformUser } from "@repo/civis";
 import {
@@ -12,11 +12,9 @@ import {
   CardHeader,
   CardTitle,
   DataTable,
-  EmptyState,
   PageHeader,
   StatusBadge,
 } from "@repo/ui";
-import { PermissionGate } from "@repo/ui/permission-gate";
 import { createTranslator } from "next-intl";
 
 const NAV = (locale: string) => [
@@ -47,7 +45,7 @@ export default async function AdminUsersPage({
   const { locale } = await params;
   const messages = await getMessages(locale);
   const t = createTranslator({ locale, messages });
-  const session = await getSession();
+  const session = await requirePermission("admin:read", { redirectTo: `/${locale}/console` });
   const users = await fetchUsers();
 
   return (
@@ -70,16 +68,6 @@ export default async function AdminUsersPage({
         />
       }
     >
-      <PermissionGate
-        session={session}
-        permission="admin:read"
-        fallback={
-          <EmptyState
-            title="Access denied"
-            description="You need the admin:read permission to view users."
-          />
-        }
-      >
         <PageHeader
           title="Users"
           description="All platform users and their current status."
@@ -105,7 +93,6 @@ export default async function AdminUsersPage({
             />
           </CardContent>
         </Card>
-      </PermissionGate>
     </AppShell>
   );
 }

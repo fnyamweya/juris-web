@@ -1,7 +1,6 @@
-import { getSession } from "@repo/auth";
+import { requirePermission } from "@repo/auth";
 import type { Locale } from "@repo/i18n";
-import { AppShell, EmptyState, PageHeader, type StateAction } from "@repo/ui";
-import { PermissionGate } from "@repo/ui/permission-gate";
+import { AppShell, PageHeader, type StateAction } from "@repo/ui";
 import type { ReactNode } from "react";
 import { getConsoleBreadcrumb, getConsoleNavItems } from "@/lib/navigation";
 
@@ -11,11 +10,16 @@ type ConsolePageShellProps = {
   title: string;
   description: string;
   action?: ReactNode;
+  /** Permission required to view this page. Defaults to "console:read". */
   permission?: string;
-  deniedAction?: StateAction;
   children: ReactNode;
 };
 
+/**
+ * Server Component shell for all console pages.
+ * Calls requirePermission so any page using this shell is automatically
+ * gated — defense-in-depth even when a page omits its own check.
+ */
 export async function ConsolePageShell({
   locale,
   breadcrumbLabel,
@@ -23,10 +27,11 @@ export async function ConsolePageShell({
   description,
   action,
   permission = "console:read",
-  deniedAction,
   children,
 }: ConsolePageShellProps) {
-  const session = await getSession();
+  const session = await requirePermission(permission, {
+    redirectTo: `/${locale}/login`,
+  });
 
   return (
     <AppShell
@@ -41,20 +46,8 @@ export async function ConsolePageShell({
       breadcrumb={getConsoleBreadcrumb(locale, breadcrumbLabel)}
       logoutUrl={`/api/auth/logout?locale=${locale}`}
     >
-      <PermissionGate
-        session={session}
-        permission={permission}
-        fallback={
-          <EmptyState
-            title="Access denied"
-            description="Your mock session does not include this permission."
-            {...(deniedAction ? { action: deniedAction } : {})}
-          />
-        }
-      >
-        <PageHeader title={title} description={description} actions={action} />
-        {children}
-      </PermissionGate>
+      <PageHeader title={title} description={description} actions={action} />
+      {children}
     </AppShell>
   );
 }
