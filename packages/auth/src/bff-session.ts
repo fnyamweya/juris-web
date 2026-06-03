@@ -161,13 +161,61 @@ export async function ensureBffSession(
 
   const threshold =
     options.refreshThresholdSeconds ?? DEFAULT_REFRESH_THRESHOLD_SECONDS;
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  if (session.payload.exp - nowSeconds >= threshold) {
+  if (!shouldRefresh(session.payload, threshold)) {
     return session;
   }
 
   const refreshed = await refreshStoredTokens(handle, session.payload);
-  return refreshed ?? invalidSession("EXPIRED");
+  if (refreshed && refreshed.status !== "INVALID") {
+    return refreshed;
+  }
+
+  const recovered = await recoverAfterRefreshFailure(
+    handle,
+    session.payload,
+    threshold,
+  );
+  return recovered ?? invalidSession("EXPIRED");
+}
+
+async function recoverAfterRefreshFailure(
+  handle: string,
+  previousPayload: SessionPayload,
+  thresholdSeconds: number,
+): Promise<BffSessionResponse | null> {
+  const latest = await readBffSession(handle, false);
+  if (latest.status !== "ACTIVE" || !latest.payload) {
+    return latest;
+  }
+
+  if (!shouldRefresh(latest.payload, thresholdSeconds)) {
+    return latest;
+  }
+
+  // A parallel request may have rotated tokens just before this refresh failed.
+  // Trust the store if the token payload changed, even when it is still near
+  // the threshold, so the losing request does not clear the session cookie.
+  return tokenPayloadChanged(previousPayload, latest.payload) ? latest : null;
+}
+
+function shouldRefresh(
+  payload: Pick<SessionPayload, "exp">,
+  thresholdSeconds: number,
+): boolean {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return payload.exp - nowSeconds < thresholdSeconds;
+}
+
+function tokenPayloadChanged(
+  previous: SessionPayload,
+  latest: SessionPayload,
+): boolean {
+  return (
+    previous.at !== latest.at ||
+    previous.it !== latest.it ||
+    previous.rt !== latest.rt ||
+    previous.exp !== latest.exp
+  );
 }
 
 async function refreshStoredTokens(
