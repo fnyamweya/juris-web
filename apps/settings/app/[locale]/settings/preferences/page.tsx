@@ -4,7 +4,6 @@ import { CivisApiError, createCivisClient } from "@repo/civis";
 import type { UserPreferences } from "@repo/civis";
 import {
   AppShell,
-  Badge,
   Breadcrumb,
   Card,
   CardContent,
@@ -14,6 +13,9 @@ import {
   PageHeader,
 } from "@repo/ui";
 import { getSettingsBreadcrumb, getSettingsNavItems } from "@/lib/navigation";
+import { AppearanceForm } from "./appearance-form";
+import { LocaleForm } from "./locale-form";
+import { MfaForm } from "./mfa-form";
 
 async function fetchPreferences(): Promise<UserPreferences | null> {
   try {
@@ -25,6 +27,41 @@ async function fetchPreferences(): Promise<UserPreferences | null> {
   }
 }
 
+// Typed defaults so the forms always receive a complete object
+const DEFAULTS: UserPreferences = {
+  appearance: {
+    theme: "system",
+    density: "comfortable",
+    fontSize: "md",
+    reduceMotion: false,
+    highContrast: false,
+  },
+  locale: {
+    language: "en",
+    timezone: "UTC",
+    dateFormat: "DD/MM/YYYY",
+    numberFormat: "us",
+    currency: "USD",
+  },
+  marketing: {
+    emailMarketing: false,
+    productUpdates: true,
+    researchInvitations: false,
+    partnerOffers: false,
+  },
+  privacy: {
+    analytics: true,
+    crashReporting: true,
+    performanceMonitoring: true,
+    personalization: true,
+  },
+  mfa: {
+    preferredMethod: null,
+    rememberDeviceDays: 0,
+  },
+  updatedAt: null,
+};
+
 export default async function SettingsPreferencesPage({
   params,
 }: {
@@ -35,9 +72,7 @@ export default async function SettingsPreferencesPage({
     redirectTo: `/${locale}/console`,
   });
   const prefs = await fetchPreferences();
-  const appearance = prefs?.appearance;
-  const loc = prefs?.locale;
-  const mfa = prefs?.mfa;
+  const merged = { ...DEFAULTS, ...prefs };
 
   return (
     <AppShell
@@ -53,109 +88,47 @@ export default async function SettingsPreferencesPage({
     >
       <PageHeader
         title="Preferences"
-        description="Appearance, language, regional formatting, and authentication preferences."
+        description="Personalise your experience. Changes save automatically."
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="mx-auto max-w-2xl space-y-6">
         <Card>
           <CardHeader>
             <CardTitle>Appearance</CardTitle>
-            <CardDescription>Theme, density, and accessibility.</CardDescription>
+            <CardDescription>
+              Theme, information density, and accessibility options.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <Row label="Theme" value={appearance?.theme ?? "system"} />
-            <Row label="Density" value={appearance?.density ?? "comfortable"} />
-            <Row label="Font size" value={appearance?.fontSize ?? "md"} />
-            <Row
-              label="Reduce motion"
-              value={appearance?.reduceMotion ? "On" : "Off"}
-            />
-            <Row
-              label="High contrast"
-              value={appearance?.highContrast ? "On" : "Off"}
-            />
+          <CardContent>
+            <AppearanceForm locale={locale} initial={merged.appearance} />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle>Language & Region</CardTitle>
-            <CardDescription>Language, timezone, and formatting.</CardDescription>
+            <CardDescription>
+              Language, timezone, date format, and currency display.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <Row label="Language" value={loc?.language ?? "en"} />
-            <Row label="Timezone" value={loc?.timezone ?? "UTC"} />
-            <Row label="Date format" value={loc?.dateFormat ?? "DD/MM/YYYY"} />
-            <Row
-              label="Numbers"
-              value={
-                loc?.numberFormat === "eu"
-                  ? "European (1.234,56)"
-                  : "US (1,234.56)"
-              }
-            />
-            <Row label="Currency" value={loc?.currency ?? "USD"} />
+          <CardContent>
+            <LocaleForm locale={locale} initial={merged.locale} />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Authentication</CardTitle>
+            <CardTitle>Authentication preferences</CardTitle>
             <CardDescription>
-              MFA method preference and device trust policy.
+              Your preferred MFA method and trusted-device policy. This does
+              not affect your organisation's MFA requirements.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <Row
-              label="Preferred MFA"
-              value={
-                mfa?.preferredMethod === "totp"
-                  ? "Authenticator app (TOTP)"
-                  : mfa?.preferredMethod === "webauthn"
-                    ? "Passkey / security key"
-                    : "No preference"
-              }
-            />
-            <Row
-              label="Remember device"
-              value={
-                !mfa?.rememberDeviceDays
-                  ? "Never"
-                  : mfa.rememberDeviceDays === 1
-                    ? "1 day"
-                    : `${mfa.rememberDeviceDays} days`
-              }
-            />
+          <CardContent>
+            <MfaForm locale={locale} initial={merged.mfa} />
           </CardContent>
         </Card>
-
-        {prefs?.updatedAt && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Sync</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Row
-                label="Last saved"
-                value={new Date(prefs.updatedAt).toLocaleString(
-                  loc?.language ?? "en",
-                )}
-              />
-            </CardContent>
-          </Card>
-        )}
       </div>
     </AppShell>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between py-0.5">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <Badge variant="outline" className="font-mono text-xs">
-        {value}
-      </Badge>
-    </div>
   );
 }
