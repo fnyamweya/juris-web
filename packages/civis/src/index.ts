@@ -88,4 +88,12 @@ export type {
   TrustedDevice,
   UserPreferences,
   UserTenantPreferences,
+  Language,
+  LanguageStatus,
+  TextDirection,
+  LegalDocument,
+  LegalDocumentType,
+  LegalDocumentStatus,
+  LegalAcceptance,
+  LegalStatus,
 } from "./types";

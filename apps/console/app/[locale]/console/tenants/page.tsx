@@ -42,7 +42,7 @@ export default async function ConsoleTenantsPage({
   const active = tenants.filter((t) => t.status === "ACTIVE").length;
   const suspended = tenants.filter((t) => t.status === "SUSPENDED").length;
   const pending = tenants.filter(
-    (t) => t.status === "PENDING" || t.status === "ARCHIVED",
+    (t) => t.status === "PROVISIONING" || t.status === "ARCHIVED",
   ).length;
 
   const metrics = [

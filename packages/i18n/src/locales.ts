@@ -14,7 +14,17 @@ export function assertLocale(
   }
 }
 
-export function getDirection(locale?: Locale): "ltr" {
-  void locale;
-  return "ltr";
+// Locale metadata — kept in sync with platform_languages table.
+export const localeMetadata: Record<
+  string,
+  { name: string; nativeName: string; direction: "ltr" | "rtl" }
+> = {
+  en: { name: "English", nativeName: "English", direction: "ltr" },
+  sw: { name: "Swahili", nativeName: "Kiswahili", direction: "ltr" },
+  fr: { name: "French", nativeName: "Français", direction: "ltr" },
+};
+
+export function getDirection(locale?: Locale): "ltr" | "rtl" {
+  if (!locale) return "ltr";
+  return localeMetadata[locale]?.direction ?? "ltr";
 }

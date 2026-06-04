@@ -6,6 +6,7 @@ import {
   ThemeScript,
 } from "@repo/ui/theme";
 import { CSP_NONCE_HEADER } from "@repo/security";
+import { createCivisClient } from "@repo/civis";
 import { cookies, headers } from "next/headers";
 import {
   DM_Sans,
@@ -68,7 +69,15 @@ export default async function RootLayout({
   children: ReactNode;
 }) {
   const appId = "console";
-  const theme = (await cookies()).get(THEME_COOKIE_NAME)?.value;
+  let theme = (await cookies()).get(THEME_COOKIE_NAME)?.value;
+  try {
+    const client = await createCivisClient();
+    const prefs = await client.me.preferences.get();
+    const t = prefs.appearance?.theme as string | undefined;
+    if (t && t !== "system") theme = t;
+  } catch {
+    // Not authenticated — fall back to cookie theme
+  }
   const nonce = (await headers()).get(CSP_NONCE_HEADER) ?? undefined;
 
   return (

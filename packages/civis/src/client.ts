@@ -3,6 +3,7 @@ import { requireEnv } from "@repo/platform";
 import { CivisApiError } from "./error";
 import { createHttp } from "./http";
 import { createAuthConfigResource } from "./resources/auth-config";
+import { createLanguagesResource } from "./resources/languages";
 import { createMeResource } from "./resources/me";
 import { createMembersResource } from "./resources/members";
 import { createPoliciesResource } from "./resources/policies";
@@ -28,6 +29,7 @@ function buildClient(accessToken: string, civisCoreUrl: string, tenantId?: strin
     policies: createPoliciesResource(http),
     roles: createRolesResource(http),
     me: createMeResource(http),
+    languages: createLanguagesResource(http),
   };
 }
 

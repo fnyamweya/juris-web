@@ -1,6 +1,6 @@
 import { requirePermission } from "@repo/auth";
 import type { Locale } from "@repo/i18n";
-import { AppShell, PageHeader, type StateAction } from "@repo/ui";
+import { AppShell, PageHeader } from "@repo/ui";
 import type { ReactNode } from "react";
 import { getConsoleBreadcrumb, getConsoleNavItems } from "@/lib/navigation";
 

@@ -2,6 +2,9 @@ import type { Http } from "../http";
 import type {
   ActiveSession,
   AppearancePreferences,
+  LegalAcceptance,
+  LegalDocument,
+  LegalStatus,
   LocalePreferences,
   LocalizationPreferences,
   MarketingPreferences,
@@ -98,6 +101,26 @@ export function createMeResource(http: Http) {
           locale,
         });
         return res!.data;
+      },
+    },
+
+
+    legal: {
+      async pending(): Promise<LegalDocument[]> {
+        const res = await http.get<LegalDocument[]>(`${BASE}/legal/pending`);
+        return res.data;
+      },
+      async accept(documentId: string, locale?: string): Promise<LegalAcceptance> {
+        const res = await http.post<LegalAcceptance>(`${BASE}/legal/accept`, { documentId, locale });
+        return res!.data;
+      },
+      async history(): Promise<LegalAcceptance[]> {
+        const res = await http.get<LegalAcceptance[]>(`${BASE}/legal/history`);
+        return res.data;
+      },
+      async status(): Promise<LegalStatus> {
+        const res = await http.get<LegalStatus>(`${BASE}/legal/status`);
+        return res.data;
       },
     },
 

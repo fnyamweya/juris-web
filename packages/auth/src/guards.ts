@@ -28,7 +28,13 @@
 
 import { redirect } from "next/navigation";
 import { getSession } from "./session";
-import type { AuthenticatedSession } from "./types";
+import type { AuthenticatedSession, Session } from "./types";
+
+function assertAuthenticated(session: Session): asserts session is AuthenticatedSession {
+  if (session.status !== "authenticated" || !session.user || !session.currentTenant) {
+    throw new Error("assertAuthenticated: session is not authenticated");
+  }
+}
 
 export interface GuardOptions {
   /**
@@ -57,6 +63,7 @@ export async function requirePermission(
   ) {
     redirect(options?.redirectTo ?? "/");
   }
+  assertAuthenticated(session);
   return session;
 }
 
@@ -77,6 +84,7 @@ export async function requireAnyPermission(
   ) {
     redirect(options?.redirectTo ?? "/");
   }
+  assertAuthenticated(session);
   return session;
 }
 
@@ -97,6 +105,7 @@ export async function requireAllPermissions(
   ) {
     redirect(options?.redirectTo ?? "/");
   }
+  assertAuthenticated(session);
   return session;
 }
 
@@ -113,5 +122,6 @@ export async function requireAuthenticated(
   if (session.status !== "authenticated") {
     redirect(options?.redirectTo ?? "/");
   }
+  assertAuthenticated(session);
   return session;
 }

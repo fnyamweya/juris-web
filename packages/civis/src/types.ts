@@ -696,3 +696,58 @@ export type ListAuditEventsParams = ListParams & {
   from?: string;
   to?: string;
 };
+
+// ─── Language catalog ─────────────────────────────────────────────────────────
+
+export type LanguageStatus = "ACTIVE" | "BETA" | "DISABLED";
+export type TextDirection = "ltr" | "rtl";
+
+export type Language = {
+  code: string;
+  name: string;
+  nativeName: string;
+  direction: TextDirection;
+  status: LanguageStatus;
+  sortOrder: number;
+};
+
+// ─── Legal documents ──────────────────────────────────────────────────────────
+
+export type LegalDocumentType =
+  | "TERMS_OF_SERVICE"
+  | "PRIVACY_POLICY"
+  | "COOKIE_POLICY"
+  | "DATA_PROCESSING_AGREEMENT";
+
+export type LegalDocumentStatus = "DRAFT" | "ACTIVE" | "SUPERSEDED" | "RETIRED";
+
+export type LegalDocument = {
+  id: string;
+  documentType: LegalDocumentType;
+  jurisdictionCode: string;
+  tenantId: string | null;
+  language: string;
+  version: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  title: string;
+  contentUrl: string;
+  status: LegalDocumentStatus;
+  requiresAcceptance: boolean;
+};
+
+export type LegalAcceptance = {
+  id: string;
+  documentId: string;
+  documentType: LegalDocumentType;
+  documentVersion: string;
+  jurisdictionCode: string;
+  language: string;
+  acceptedAt: string;
+  channel: string;
+};
+
+export type LegalStatus = {
+  pendingDocumentIds: string[];
+  requiresAction: boolean;
+};
