@@ -1,4 +1,4 @@
-import { getTranslations } from "next-intl/server";
+import { getSession } from "@repo/auth";
 import type { Locale } from "@repo/i18n";
 import {
   Button,
@@ -18,6 +18,7 @@ import {
   Network,
   ShieldCheck,
 } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 
 export default async function PublicHomePage({
   params,
@@ -26,6 +27,10 @@ export default async function PublicHomePage({
 }) {
   const { locale } = await params;
   const t = await getTranslations();
+  const session = await getSession();
+  const isAuthenticated = session.status === "authenticated";
+  const consoleUrl = `/${locale}/console`;
+  const loginUrl = `/${locale}/login`;
 
   return (
     <main className="min-h-screen">
@@ -66,7 +71,11 @@ export default async function PublicHomePage({
           <LocaleSwitcher locale={locale} />
           <ThemeToggle />
           <Button asChild>
-            <a href={"/" + locale + "/login"}>{t("auth.login")}</a>
+            {isAuthenticated ? (
+              <a href={consoleUrl}>Access Console</a>
+            ) : (
+              <a href={loginUrl}>{t("auth.login")}</a>
+            )}
           </Button>
         </div>
       </header>
@@ -84,9 +93,15 @@ export default async function PublicHomePage({
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg">
-              <a href={"/" + locale + "/login"}>
-                Start securely <ArrowRight className="h-4 w-4" />
-              </a>
+              {isAuthenticated ? (
+                <a href={consoleUrl}>
+                  Go to Console <ArrowRight className="h-4 w-4" />
+                </a>
+              ) : (
+                <a href={loginUrl}>
+                  Start securely <ArrowRight className="h-4 w-4" />
+                </a>
+              )}
             </Button>
             <Button asChild variant="outline" size="lg">
               <a href={"/" + locale + "/security"}>Security posture</a>
