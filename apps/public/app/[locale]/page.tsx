@@ -1,5 +1,5 @@
-import { getSession } from "@repo/auth";
 import type { Locale } from "@repo/i18n";
+import { cookies } from "next/headers";
 import {
   Button,
   Card,
@@ -27,8 +27,9 @@ export default async function PublicHomePage({
 }) {
   const { locale } = await params;
   const t = await getTranslations();
-  const session = await getSession();
-  const isAuthenticated = session.status === "authenticated";
+  // Check cookie presence only — avoids a BFF round-trip on every public page load
+  // and prevents the touch: true call from corrupting an otherwise valid session.
+  const isAuthenticated = !!(await cookies()).get("juris-session");
   const consoleUrl = `/${locale}/console`;
   const loginUrl = `/${locale}/login`;
 
