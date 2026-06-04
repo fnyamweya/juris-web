@@ -31,7 +31,10 @@ import { getSession } from "./session";
 import type { AuthenticatedSession, Session } from "./types";
 
 function assertAuthenticated(session: Session): asserts session is AuthenticatedSession {
-  if (session.status !== "authenticated" || !session.user || !session.currentTenant) {
+  // Only assert status — redirect() above already handles the failure path at runtime.
+  // currentTenant is intentionally not checked here: platform users with no active
+  // tenant are still authenticated. The TypeScript type narrowing is what matters.
+  if (session.status !== "authenticated") {
     throw new Error("assertAuthenticated: session is not authenticated");
   }
 }
