@@ -1,3 +1,4 @@
+import { getSession } from "@repo/auth";
 import type { Locale } from "@repo/i18n";
 import {
   Alert,
@@ -6,6 +7,7 @@ import {
   LocaleSwitcher,
   ThemeToggle,
 } from "@repo/ui";
+import { redirect } from "next/navigation";
 import { SignInButton } from "@/components/sign-in-button";
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
@@ -29,6 +31,11 @@ export default async function LoginPage({
 }) {
   const { locale } = await params;
   const { error, returnTo, tenant_id: tenantId } = await searchParams;
+
+  const session = await getSession();
+  if (session.status === "authenticated") {
+    redirect(returnTo?.startsWith("/") ? returnTo : `/${locale}/console`);
+  }
 
   const errorMessage = error
     ? (AUTH_ERROR_MESSAGES[error] ?? decodeURIComponent(error))
