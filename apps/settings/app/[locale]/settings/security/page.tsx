@@ -113,8 +113,8 @@ export default async function SettingsSecurityPage({
                 <PolicyItem
                   label="SSO providers"
                   value={
-                    authConfig.externalProviders?.length
-                      ? `${authConfig.externalProviders.length} configured`
+                    authConfig.externalIdentityProviders?.length
+                      ? `${authConfig.externalIdentityProviders.length} configured`
                       : "None"
                   }
                 />
