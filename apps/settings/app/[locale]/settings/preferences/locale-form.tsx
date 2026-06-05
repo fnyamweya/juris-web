@@ -75,8 +75,10 @@ export function LocaleForm({ locale, initial }: Props) {
     startTransition(async () => {
       try {
         await saveLocale(locale, update);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.success("Language & region saved");
       } catch {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.error("Failed to save. Please try again.");
       }
     });

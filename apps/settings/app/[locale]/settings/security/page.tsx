@@ -1,21 +1,19 @@
 import type { Locale } from "@repo/i18n";
-import { requirePermission } from "@repo/auth";
 import { CivisApiError, createCivisClient } from "@repo/civis";
 import type { ActiveSession, TenantAuthConfig, TrustedDevice } from "@repo/civis";
+import { getEnv } from "@repo/platform";
 import {
-  AppShell,
   Badge,
-  Breadcrumb,
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-  PageHeader,
 } from "@repo/ui";
 import { ShieldCheck } from "lucide-react";
-import { getSettingsBreadcrumb, getSettingsNavItems } from "@/lib/navigation";
+import { MyAccountPageShell } from "@/components/my-account-page-shell";
 import { SessionsList } from "./sessions-list";
+import { TotpSection } from "./totp-section";
 import { TrustedDevicesList } from "./trusted-devices-list";
 
 async function fetchSecurityData(tenantId: string | undefined) {
@@ -35,38 +33,56 @@ async function fetchSecurityData(tenantId: string | undefined) {
   }
 }
 
+async function fetchTotpStatus(): Promise<{ enrolled: boolean; enrolledAt: string | null }> {
+  try {
+    const casUrl = getEnv("CAS_ISSUER_URL") ?? "http://localhost:9000";
+    const res = await fetch(`${casUrl}/mfa/totp/status`, { cache: "no-store" });
+    if (!res.ok) return { enrolled: false, enrolledAt: null };
+    return res.json() as Promise<{ enrolled: boolean; enrolledAt: string | null }>;
+  } catch {
+    return { enrolled: false, enrolledAt: null };
+  }
+}
+
 export default async function SettingsSecurityPage({
   params,
 }: {
   params: Promise<{ locale: Locale }>;
 }) {
   const { locale } = await params;
-  const session = await requirePermission("settings:read", {
-    redirectTo: `/${locale}/console`,
-  });
-  const tenantId = session.currentTenant?.id;
-  const { authConfig, sessions, trustedDevices } = await fetchSecurityData(tenantId);
+
+  const [{ authConfig, sessions, trustedDevices }, totpStatus] =
+    await Promise.all([
+      fetchSecurityData(undefined),
+      fetchTotpStatus(),
+    ]);
+
   const mfaMode = authConfig?.mfaPolicy?.mode;
 
   return (
-    <AppShell
-      appName="Settings"
-      navItems={getSettingsNavItems(locale)}
-      user={session.user}
-      tenant={session.currentTenant}
-      tenants={session.availableTenants}
+    <MyAccountPageShell
       locale={locale}
-      session={session}
-      logoutUrl={`/api/auth/logout?locale=${locale}`}
-      breadcrumb={<Breadcrumb items={getSettingsBreadcrumb(locale, "Security")} />}
+      breadcrumbLabel="Security & Sign In"
+      title="Security & Sign In"
+      description="Authenticator app, active sessions, trusted devices, and your organisation's authentication policy."
     >
-      <PageHeader
-        title="Security"
-        description="Active sessions, trusted devices, and your organisation's authentication policy."
-      />
-
       <div className="mx-auto max-w-2xl space-y-6">
-        {/* Org auth policy — read-only overview */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="size-4 text-muted-foreground" />
+              <CardTitle>Authenticator app (TOTP)</CardTitle>
+            </div>
+            <CardDescription>
+              Time-based one-time passwords via Google Authenticator, Authy, or
+              any TOTP-compatible app.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TotpSection initial={totpStatus} />
+          </CardContent>
+        </Card>
+
         {authConfig && (
           <Card>
             <CardHeader>
@@ -129,7 +145,6 @@ export default async function SettingsSecurityPage({
           </Card>
         )}
 
-        {/* Active sessions */}
         <Card>
           <CardHeader>
             <CardTitle>Active sessions</CardTitle>
@@ -139,16 +154,10 @@ export default async function SettingsSecurityPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <SessionsList
-              locale={locale}
-              sessions={sessions}
-              // No server-side way to know which handle maps to this request,
-              // so we pass undefined — sessions show without "current" badge.
-            />
+            <SessionsList locale={locale} sessions={sessions} />
           </CardContent>
         </Card>
 
-        {/* Trusted devices */}
         <Card>
           <CardHeader>
             <CardTitle>Trusted devices</CardTitle>
@@ -162,35 +171,8 @@ export default async function SettingsSecurityPage({
             <TrustedDevicesList locale={locale} devices={trustedDevices} />
           </CardContent>
         </Card>
-
-        {/* Enrolled MFA methods — informational */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Enrolled MFA methods</CardTitle>
-            <CardDescription>
-              Methods available on your account. Set your preferred method in{" "}
-              <a
-                href={`/${locale}/settings/preferences`}
-                className="underline underline-offset-2"
-              >
-                Preferences
-              </a>
-              .
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <MfaMethodRow
-              label="Authenticator app (TOTP)"
-              description="Time-based one-time passwords via Google Authenticator or Authy."
-            />
-            <MfaMethodRow
-              label="Passkey or security key (WebAuthn / FIDO2)"
-              description="Biometric authentication or a hardware security key."
-            />
-          </CardContent>
-        </Card>
       </div>
-    </AppShell>
+    </MyAccountPageShell>
   );
 }
 
@@ -211,23 +193,6 @@ function PolicyItem({
           {value}
         </Badge>
       </dd>
-    </div>
-  );
-}
-
-function MfaMethodRow({
-  label,
-  description,
-}: {
-  label: string;
-  description: string;
-}) {
-  return (
-    <div className="flex items-start gap-3 rounded-lg border p-3">
-      <div className="flex-1 space-y-0.5">
-        <p className="text-sm font-medium">{label}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
     </div>
   );
 }

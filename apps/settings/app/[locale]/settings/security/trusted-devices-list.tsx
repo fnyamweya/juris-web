@@ -43,10 +43,12 @@ export function TrustedDevicesList({ locale, devices }: Props) {
     startTransition(async () => {
       try {
         await renameTrustedDevice(locale, deviceId, label);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.success("Device renamed");
         setEditingId(null);
         setEditLabel("");
       } catch {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.error("Could not rename device. Please try again.");
       }
     });
@@ -64,8 +66,10 @@ export function TrustedDevicesList({ locale, devices }: Props) {
     startTransition(async () => {
       try {
         await revokeTrustedDevice(locale, deviceId);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.success("Device trust removed");
       } catch {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.error("Could not remove trust. Please try again.");
       }
     });

@@ -1,19 +1,15 @@
 import type { Locale } from "@repo/i18n";
-import { requirePermission } from "@repo/auth";
 import { CivisApiError, createCivisClient } from "@repo/civis";
 import type { MarketingPreferences, PrivacyPreferences, TermsStatus } from "@repo/civis";
 import {
-  AppShell,
-  Breadcrumb,
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-  PageHeader,
 } from "@repo/ui";
 import { CheckCircle2, FileText } from "lucide-react";
-import { getSettingsBreadcrumb, getSettingsNavItems } from "@/lib/navigation";
+import { MyAccountPageShell } from "@/components/my-account-page-shell";
 import { MarketingForm, PrivacyForm } from "./privacy-form";
 
 const DEFAULT_MARKETING: MarketingPreferences = {
@@ -58,30 +54,16 @@ export default async function SettingsPrivacyPage({
   params: Promise<{ locale: Locale }>;
 }) {
   const { locale } = await params;
-  const session = await requirePermission("settings:read", {
-    redirectTo: `/${locale}/console`,
-  });
   const { marketing, privacy, terms } = await fetchPrivacyData();
 
   return (
-    <AppShell
-      appName="Settings"
-      navItems={getSettingsNavItems(locale)}
-      user={session.user}
-      tenant={session.currentTenant}
-      tenants={session.availableTenants}
+    <MyAccountPageShell
       locale={locale}
-      session={session}
-      logoutUrl={`/api/auth/logout?locale=${locale}`}
-      breadcrumb={<Breadcrumb items={getSettingsBreadcrumb(locale, "Privacy")} />}
+      breadcrumbLabel="Data & Privacy"
+      title="Data & Privacy"
+      description="Manage your communication preferences, data sharing settings, and Terms & Conditions history."
     >
-      <PageHeader
-        title="Privacy & Consent"
-        description="Manage your communication preferences, data sharing settings, and Terms & Conditions history. Changes save automatically."
-      />
-
       <div className="mx-auto max-w-2xl space-y-6">
-        {/* Marketing communications */}
         <Card>
           <CardHeader>
             <CardTitle>Communications</CardTitle>
@@ -96,7 +78,6 @@ export default async function SettingsPrivacyPage({
           </CardContent>
         </Card>
 
-        {/* Privacy & telemetry */}
         <Card>
           <CardHeader>
             <CardTitle>Data & privacy</CardTitle>
@@ -111,7 +92,6 @@ export default async function SettingsPrivacyPage({
           </CardContent>
         </Card>
 
-        {/* Terms & Conditions */}
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -182,6 +162,6 @@ export default async function SettingsPrivacyPage({
           </CardContent>
         </Card>
       </div>
-    </AppShell>
+    </MyAccountPageShell>
   );
 }

@@ -12,8 +12,8 @@ export function generateStaticParams() {
 }
 
 export const metadata = {
-  title: "Juris Settings",
-  description: "Juris Settings frontend",
+  title: "My Account — Juris",
+  description: "My Account — Juris",
 };
 
 export default async function LocaleLayout({
