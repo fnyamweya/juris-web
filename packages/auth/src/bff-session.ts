@@ -1,15 +1,10 @@
 import { getEnv } from "@repo/platform";
-import { refreshAccessToken } from "./cas-client";
-import type {
-  BffSessionResponse,
-  BffSessionResult,
-  SessionPayload,
-  StoredTenant,
-} from "./types";
+import type { BffSessionResponse, BffSessionResult, StoredTenant } from "./types";
 
-const SESSION_SECRET_HEADER = "X-Civis-Bff-Session-Secret";
-const DEV_SESSION_STORE_SECRET = "dev-ui-bff-session-secret-change-me";
-const DEFAULT_REFRESH_THRESHOLD_SECONDS = 60;
+const CLIENT_ID_HEADER = "X-Civis-Bff-Client-Id";
+const CLIENT_SECRET_HEADER = "X-Civis-Bff-Client-Secret";
+const DEV_BFF_CLIENT_ID = "identity-bff";
+const DEV_BFF_CLIENT_SECRET = "dev-identity-bff-secret-change-me";
 
 type ApiEnvelope<T> = {
   data?: T;
@@ -17,7 +12,6 @@ type ApiEnvelope<T> = {
 
 type SessionRequestOptions = {
   touch?: boolean;
-  refreshThresholdSeconds?: number;
 };
 
 type CreateSessionParams = {
@@ -51,12 +45,11 @@ function coreUrl(): string | null {
   return casIssuer.replace(/\/+$/, "").replace(":9000", ":8080");
 }
 
-function storeSecret(): string {
-  return (
-    getEnv("CIVIS_UI_AUTH_SESSION_API_SECRET") ??
-    getEnv("BFF_SESSION_STORE_SECRET") ??
-    DEV_SESSION_STORE_SECRET
-  );
+function clientCredentials(): { clientId: string; clientSecret: string } {
+  return {
+    clientId: getEnv("CIVIS_UI_BFF_CLIENT_ID") ?? DEV_BFF_CLIENT_ID,
+    clientSecret: getEnv("CIVIS_UI_BFF_CLIENT_SECRET") ?? DEV_BFF_CLIENT_SECRET,
+  };
 }
 
 async function postSession<T>(
@@ -66,12 +59,14 @@ async function postSession<T>(
   const base = coreUrl();
   if (!base) return null;
 
+  const { clientId, clientSecret } = clientCredentials();
   const response = await fetch(`${base}/v1/ui/sessions${path}`, {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      [SESSION_SECRET_HEADER]: storeSecret(),
+      [CLIENT_ID_HEADER]: clientId,
+      [CLIENT_SECRET_HEADER]: clientSecret,
     },
     body: JSON.stringify(body),
     cache: "no-store",
@@ -150,98 +145,23 @@ export async function refreshUserPermissions(
   ).then((r) => (r ? { sessionsUpdated: r.sessionsUpdated } : null));
 }
 
+/**
+ * Introspects the BFF session, trusting the store's response: token refresh,
+ * idle-timeout enforcement, and permission re-resolution all happen server-side
+ * (UiBffSessionService.introspect, AUTH-006/AUTH-007) under a row lock that
+ * serializes concurrent callers.
+ *
+ * INVALID can also mean a transient store error (e.g. a dropped connection), so
+ * this retries once before giving up.
+ */
 export async function ensureBffSession(
   handle: string,
   options: SessionRequestOptions = {},
 ): Promise<BffSessionResponse> {
-  const session = await readBffSession(handle, options.touch ?? false);
-  if (session.status !== "ACTIVE" || !session.payload) {
+  const touch = options.touch ?? false;
+  const session = await readBffSession(handle, touch);
+  if (session.status !== "INVALID") {
     return session;
   }
-
-  const threshold =
-    options.refreshThresholdSeconds ?? DEFAULT_REFRESH_THRESHOLD_SECONDS;
-  if (!shouldRefresh(session.payload, threshold)) {
-    return session;
-  }
-
-  const refreshed = await refreshStoredTokens(handle, session.payload);
-  if (refreshed && refreshed.status !== "INVALID") {
-    return refreshed;
-  }
-
-  const recovered = await recoverAfterRefreshFailure(
-    handle,
-    session.payload,
-    threshold,
-  );
-  return recovered ?? invalidSession("EXPIRED");
-}
-
-async function recoverAfterRefreshFailure(
-  handle: string,
-  previousPayload: SessionPayload,
-  thresholdSeconds: number,
-): Promise<BffSessionResponse | null> {
-  const latest = await readBffSession(handle, false);
-  if (latest.status !== "ACTIVE" || !latest.payload) {
-    return latest;
-  }
-
-  if (!shouldRefresh(latest.payload, thresholdSeconds)) {
-    return latest;
-  }
-
-  // A parallel request may have rotated tokens just before this refresh failed.
-  // Trust the store if the token payload changed, even when it is still near
-  // the threshold, so the losing request does not clear the session cookie.
-  return tokenPayloadChanged(previousPayload, latest.payload) ? latest : null;
-}
-
-function shouldRefresh(
-  payload: Pick<SessionPayload, "exp">,
-  thresholdSeconds: number,
-): boolean {
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  return payload.exp - nowSeconds < thresholdSeconds;
-}
-
-function tokenPayloadChanged(
-  previous: SessionPayload,
-  latest: SessionPayload,
-): boolean {
-  return (
-    previous.at !== latest.at ||
-    previous.it !== latest.it ||
-    previous.rt !== latest.rt ||
-    previous.exp !== latest.exp
-  );
-}
-
-async function refreshStoredTokens(
-  handle: string,
-  payload: SessionPayload,
-): Promise<BffSessionResponse | null> {
-  const casUrl = getEnv("CAS_ISSUER_URL");
-  const clientId = getEnv("CAS_BFF_CLIENT_ID");
-  const clientSecret = getEnv("CAS_BFF_CLIENT_SECRET");
-  if (!casUrl || !clientId || !clientSecret) return null;
-
-  const result = await refreshAccessToken({
-    casUrl,
-    clientId,
-    clientSecret,
-    refreshToken: payload.rt,
-  }).catch(() => null);
-
-  if (!result?.ok) return null;
-
-  const { access_token, id_token, refresh_token, expires_in } = result.tokens;
-  return replaceBffSessionTokens({
-    handle,
-    accessToken: access_token,
-    idToken: id_token,
-    refreshToken: refresh_token,
-    expiresIn: expires_in,
-  });
+  return readBffSession(handle, touch);
 }

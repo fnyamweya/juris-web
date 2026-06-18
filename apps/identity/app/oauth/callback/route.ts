@@ -6,9 +6,12 @@ import {
   exchangeAuthorizationCode,
   PKCE_COOKIE_NAME,
   reactivateBffSession,
+  sanitizeReturnTo,
   SESSION_COOKIE_NAME,
   TENANT_CTX_COOKIE_MAX_AGE,
   TENANT_CTX_COOKIE_NAME,
+  verifyAccessToken,
+  verifyIdToken,
 } from "@repo/auth";
 import { getEnv, requireEnv } from "@repo/platform";
 import { cookies } from "next/headers";
@@ -121,11 +124,13 @@ export async function GET(request: NextRequest): Promise<Response> {
     PKCE_COOKIE_NAME,
   ];
 
-  // ── Resolve PKCE state + verifier ─────────────────────────────────────────
+  // ── Resolve PKCE state + verifier + nonce ─────────────────────────────────
   let storedState: string | undefined =
     request.cookies.get(CIVIS_BFF_STATE)?.value;
   let codeVerifier: string | undefined =
     request.cookies.get(CIVIS_BFF_VERIFIER)?.value;
+  let storedNonce: string | undefined =
+    request.cookies.get(CIVIS_BFF_NONCE)?.value;
 
   if (!storedState || !codeVerifier) {
     const pkceRaw = request.cookies.get(PKCE_COOKIE_NAME)?.value;
@@ -135,6 +140,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       if (pkce) {
         storedState = pkce.state;
         codeVerifier = pkce.codeVerifier;
+        storedNonce = pkce.nonce;
         if (pkce.locale) locale = pkce.locale;
         if (pkce.returnTo) returnTo = pkce.returnTo;
       }
@@ -155,11 +161,11 @@ export async function GET(request: NextRequest): Promise<Response> {
   }
 
   if (!storedState || storedState !== stateParam) {
-    return loginRedirectResponse(locale, allFlowCookies);
+    return loginRedirectResponse(locale, allFlowCookies, "state_mismatch");
   }
 
   if (!codeVerifier) {
-    return loginRedirectResponse(locale, allFlowCookies);
+    return loginRedirectResponse(locale, allFlowCookies, "state_mismatch");
   }
 
   // ── Token exchange ────────────────────────────────────────────────────────
@@ -186,15 +192,39 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   const { access_token, id_token, refresh_token, expires_in } = result.tokens;
 
-  const activeTenantId = activeTenantIdFromToken(access_token);
+  // ── Verify ID token and access token ──────────────────────────────────────
+  // Defense-in-depth: confirms the tokens CAS returned are signed by CAS, not
+  // expired, scoped to this client, and that the id_token matches the nonce
+  // this browser generated, preventing token substitution/replay.
+  // UiBffSessionService performs the authoritative verification when the BFF
+  // session is created below.
+  if (!storedNonce) {
+    return loginRedirectResponse(locale, allFlowCookies, "state_mismatch");
+  }
+  const verifiedIdToken = await verifyIdToken(id_token, {
+    issuer: casUrl,
+    clientId,
+    nonce: storedNonce,
+  });
+  if (!verifiedIdToken) {
+    return loginRedirectResponse(locale, allFlowCookies, "state_mismatch");
+  }
+  const verifiedAccessToken = await verifyAccessToken(access_token, {
+    issuer: casUrl,
+  });
+  if (!verifiedAccessToken) {
+    return loginRedirectResponse(locale, allFlowCookies, "invalid_token");
+  }
+
   const civisCoreUrl =
     getEnv("CIVIS_CORE_URL") ?? casUrl.replace(":9000", ":8080");
   const tenants = await resolveTenantsFromToken(access_token, civisCoreUrl);
+  const activeTenantId =
+    activeTenantIdFromToken(access_token) ??
+    (tenants.length === 1 ? tenants[0]?.id : undefined);
   const secure = isSecure();
 
-  const safeReturnTo = returnTo.startsWith("/")
-    ? returnTo
-    : `/${locale}/console`;
+  const safeReturnTo = sanitizeReturnTo(returnTo, `/${locale}/console`);
   const isReactivation = appFlow?.flow === "reactivate";
   const sessionHandle = appFlow?.sessionHandle;
   const destination =

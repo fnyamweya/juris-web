@@ -4,6 +4,7 @@ import { Button } from "@repo/ui";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { TotpSetupFlow } from "./totp-setup-flow";
+import { useStepUp } from "./use-step-up";
 
 interface TotpStatus {
   enrolled: boolean;
@@ -19,6 +20,7 @@ export function TotpSection({ initial }: Props) {
   const [showSetup, setShowSetup] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { requireStepUp, dialog } = useStepUp();
 
   function handleSetupClose() {
     setShowSetup(false);
@@ -37,7 +39,10 @@ export function TotpSection({ initial }: Props) {
     setConfirmRemove(false);
     startTransition(async () => {
       try {
-        const res = await fetch("/api/mfa/totp/revoke", { method: "DELETE" });
+        const res = await requireStepUp(() =>
+          fetch("/api/mfa/totp/revoke", { method: "DELETE" }),
+        );
+        if (!res) return;
         if (!res.ok) {
           toast.error("Could not remove authenticator app. Please try again.");
           return;
@@ -53,10 +58,10 @@ export function TotpSection({ initial }: Props) {
   function handleRegenerateCodes() {
     startTransition(async () => {
       try {
-        const res = await fetch("/api/mfa/backup-codes/generate", {
-          method: "POST",
-          body: "{}",
-        });
+        const res = await requireStepUp(() =>
+          fetch("/api/mfa/backup-codes/generate", { method: "POST", body: "{}" }),
+        );
+        if (!res) return;
         if (!res.ok) {
           toast.error("Could not regenerate backup codes. Please try again.");
           return;
@@ -78,12 +83,18 @@ export function TotpSection({ initial }: Props) {
   }
 
   if (showSetup) {
-    return <TotpSetupFlow onClose={handleSetupClose} />;
+    return (
+      <>
+        {dialog}
+        <TotpSetupFlow onClose={handleSetupClose} requireStepUp={requireStepUp} />
+      </>
+    );
   }
 
   if (status.enrolled) {
     return (
       <div className="space-y-3">
+        {dialog}
         <div className="flex items-center gap-2">
           <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
           <span className="text-sm font-medium text-green-700 dark:text-green-400">
@@ -119,6 +130,7 @@ export function TotpSection({ initial }: Props) {
 
   return (
     <div className="space-y-3">
+      {dialog}
       <div className="flex items-center gap-2">
         <span className="inline-flex h-2 w-2 rounded-full bg-muted-foreground/40" />
         <span className="text-sm text-muted-foreground">Not set up</span>

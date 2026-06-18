@@ -45,10 +45,8 @@ export function AppearanceForm({ locale, initial }: Props) {
     startTransition(async () => {
       try {
         await saveAppearance(locale, update);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.success("Appearance saved");
       } catch {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.error("Failed to save. Please try again.");
       }
     });

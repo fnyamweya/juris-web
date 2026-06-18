@@ -33,9 +33,6 @@ export async function getAccessToken(): Promise<string | null> {
     return legacyPayload.at;
   }
 
-  const bffSession = await ensureBffSession(cookieValue, {
-    touch: false,
-    refreshThresholdSeconds: 60,
-  });
+  const bffSession = await ensureBffSession(cookieValue, { touch: false });
   return bffSession.status === "ACTIVE" ? (bffSession.payload?.at ?? null) : null;
 }

@@ -64,38 +64,26 @@ export async function exchangeAuthorizationCode(params: {
   );
 }
 
-export async function refreshAccessToken(params: {
-  casUrl: string;
-  clientId: string;
-  clientSecret: string;
-  refreshToken: string;
-}): Promise<CasTokenResult> {
-  return postTokenRequest(
-    `${params.casUrl}/oauth2/token`,
-    {
-      grant_type: "refresh_token",
-      refresh_token: params.refreshToken,
-    },
-    basicAuth(params.clientId, params.clientSecret),
-  );
+type CasCsrfTokenResponse = {
+  token: string;
+  headerName: string;
+  parameterName: string;
+};
+
+/**
+ * Fetches a CSRF token bound to the caller's CAS session via `GET /csrf`, for forwarding on
+ * mutating requests to CSRF-protected CAS endpoints (e.g. MFA factor lifecycle, AUTH-004).
+ * Returns `null` if the CAS session is missing/invalid.
+ */
+export async function fetchCasCsrfHeaders(
+  casUrl: string,
+  cookie: string,
+): Promise<Record<string, string> | null> {
+  const response = await fetch(`${casUrl}/csrf`, { headers: { cookie } });
+  if (!response.ok) {
+    return null;
+  }
+  const { token, headerName } = (await response.json()) as CasCsrfTokenResponse;
+  return { cookie, [headerName]: token };
 }
 
-export async function revokeToken(params: {
-  casUrl: string;
-  clientId: string;
-  clientSecret: string;
-  token: string;
-  tokenTypeHint?: "refresh_token" | "access_token";
-}): Promise<void> {
-  await fetch(`${params.casUrl}/oauth2/revoke`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: basicAuth(params.clientId, params.clientSecret),
-    },
-    body: new URLSearchParams({
-      token: params.token,
-      ...(params.tokenTypeHint ? { token_type_hint: params.tokenTypeHint } : {}),
-    }).toString(),
-  });
-}

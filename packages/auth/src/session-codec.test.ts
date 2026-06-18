@@ -15,7 +15,6 @@ const WRONG_SECRET = "wrong-secret-that-will-fail-decryption";
 const SESSION: SessionPayload = {
   at: "header.eyJ1c2VyX2lkIjoidGVzdCJ9.sig",
   it: "header.eyJuYW1lIjoidGVzdCJ9.sig",
-  rt: "opaque-refresh-token",
   exp: Math.floor(Date.now() / 1000) + 3600,
   tenants: [{ id: "t1", name: "Acme", slug: "acme" }],
 };

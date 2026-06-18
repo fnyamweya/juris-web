@@ -277,6 +277,19 @@ export type ListMembersParams = ListParams & {
   sort?: string;
 };
 
+export type InviteMemberRequest = {
+  email: string;
+  displayName: string;
+  roles?: string[];
+};
+
+export type PasswordResetIssued = {
+  link: string;
+  expiresAt: string;
+  emailDispatched: boolean;
+  warning?: string | null;
+};
+
 export type AssignRoleResponse = {
   status:
     | "EXECUTED"

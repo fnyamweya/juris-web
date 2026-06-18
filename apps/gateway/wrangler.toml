@@ -3,5 +3,21 @@ main = "src/worker.ts"
 compatibility_date = "2026-05-23"
 compatibility_flags = ["nodejs_compat"]
 
+[vars]
+ENVIRONMENT = "production"
+
 [observability]
 enabled = true
+
+# Auth-sensitive routes (login, register, forgot-password, oauth/callback,
+# session) get a tighter per-IP limit than the rest of the gateway.
+[[ratelimits]]
+name = "AUTH_RATE_LIMITER"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }
+
+# General per-IP limit applied to every other route.
+[[ratelimits]]
+name = "GATEWAY_RATE_LIMITER"
+namespace_id = "1002"
+simple = { limit = 300, period = 60 }

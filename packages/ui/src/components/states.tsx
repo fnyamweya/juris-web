@@ -1,4 +1,4 @@
-import { AlertCircle, FileSearch, Loader2 } from "lucide-react";
+import { AlertCircle, FileSearch, Loader2, ShieldAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "./button";
 
@@ -61,6 +61,14 @@ export function ErrorState(props: {
   action?: StateAction;
 }) {
   return <StateFrame icon={<AlertCircle className="h-5 w-5" />} {...props} />;
+}
+
+export function AccessDeniedState(props: {
+  title: string;
+  description?: string;
+  action?: StateAction;
+}) {
+  return <StateFrame icon={<ShieldAlert className="h-5 w-5" />} {...props} />;
 }
 
 export function LoadingState({ label = "Loading" }: { label?: string }) {

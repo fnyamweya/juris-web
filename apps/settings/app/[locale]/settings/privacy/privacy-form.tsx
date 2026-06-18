@@ -20,10 +20,8 @@ export function MarketingForm({ locale, initial }: MarketingProps) {
     startTransition(async () => {
       try {
         await saveMarketing(locale, { ...initial, ...update });
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.success("Communication preferences saved");
       } catch {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.error("Failed to save. Please try again.");
       }
     });
@@ -77,10 +75,8 @@ export function PrivacyForm({ locale, initial }: PrivacyProps) {
     startTransition(async () => {
       try {
         await savePrivacy(locale, { ...initial, ...update });
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.success("Privacy settings saved");
       } catch {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.error("Failed to save. Please try again.");
       }
     });

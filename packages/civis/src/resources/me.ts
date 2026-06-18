@@ -31,27 +31,27 @@ export function createMeResource(http: Http) {
 
       async updateAppearance(patch: Partial<AppearancePreferences>): Promise<AppearancePreferences> {
         const res = await http.patch<AppearancePreferences>(`${BASE}/preferences/appearance`, patch);
-        return res!.data;
+        return res.data;
       },
 
       async updateLocale(patch: Partial<LocalePreferences>): Promise<LocalePreferences> {
         const res = await http.patch<LocalePreferences>(`${BASE}/preferences/locale`, patch);
-        return res!.data;
+        return res.data;
       },
 
       async updateMarketing(patch: Partial<MarketingPreferences>): Promise<MarketingPreferences> {
         const res = await http.patch<MarketingPreferences>(`${BASE}/preferences/marketing`, patch);
-        return res!.data;
+        return res.data;
       },
 
       async updatePrivacy(patch: Partial<PrivacyPreferences>): Promise<PrivacyPreferences> {
         const res = await http.patch<PrivacyPreferences>(`${BASE}/preferences/privacy`, patch);
-        return res!.data;
+        return res.data;
       },
 
       async updateMfa(patch: Partial<MfaPreferences>): Promise<MfaPreferences> {
         const res = await http.patch<MfaPreferences>(`${BASE}/preferences/mfa`, patch);
-        return res!.data;
+        return res.data;
       },
 
       tenant: {
@@ -71,7 +71,7 @@ export function createMeResource(http: Http) {
             `${BASE}/preferences/tenant/${tenantId}/notifications`,
             patch,
           );
-          return res!.data;
+          return res.data;
         },
 
         async updateLocalization(
@@ -82,7 +82,7 @@ export function createMeResource(http: Http) {
             `${BASE}/preferences/tenant/${tenantId}/localization`,
             patch,
           );
-          return res!.data;
+          return res.data;
         },
       },
     },

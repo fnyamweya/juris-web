@@ -16,6 +16,9 @@
     "test:coverage": "vitest run --coverage --passWithNoTests",
     "clean": "rm -rf dist coverage"
   },
+  "dependencies": {
+    "jose": "^6.2.3"
+  },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/platform": "workspace:*",

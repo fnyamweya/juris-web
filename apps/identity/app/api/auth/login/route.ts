@@ -3,6 +3,7 @@ import {
   generateCodeChallenge,
   generatePkceState,
   PKCE_COOKIE_NAME,
+  sanitizeReturnTo,
 } from "@repo/auth";
 import { getEnv, requireEnv } from "@repo/platform";
 import { NextResponse, type NextRequest } from "next/server";
@@ -38,10 +39,10 @@ function getSetCookieStrings(headers: Headers): string[] {
 export async function GET(request: NextRequest): Promise<Response> {
   const { searchParams } = request.nextUrl;
   const locale = searchParams.get("locale") ?? "en";
-  const returnTo = searchParams.get("returnTo") ?? `/${locale}/console`;
-  const safeReturnTo = returnTo.startsWith("/")
-    ? returnTo
-    : `/${locale}/console`;
+  const safeReturnTo = sanitizeReturnTo(
+    searchParams.get("returnTo"),
+    `/${locale}/console`,
+  );
 
   // tenant_id: explicit param takes precedence; fall back to signed tenant-ctx cookie
   // so tenant users get tenant-scoped tokens (correct TTL) even from the generic login page.

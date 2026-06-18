@@ -6,7 +6,6 @@ export async function LegalGate({ children, locale }: { children: React.ReactNod
   let pendingDocs: LegalDocument[] = [];
   try {
     const client = await createCivisClient();
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     pendingDocs = (await (client.me.legal as { pending: () => Promise<LegalDocument[]> }).pending());
   } catch {
     // Not authenticated — render children, page-level guard will redirect

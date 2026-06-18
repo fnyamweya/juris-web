@@ -31,6 +31,7 @@ export async function ConsolePageShell({
 }: ConsolePageShellProps) {
   const session = await requirePermission(permission, {
     redirectTo: `/${locale}/login`,
+    unauthorizedTo: `/${locale}/401`,
   });
 
   return (

@@ -2,11 +2,10 @@ import {
   decodeSessionCookie,
   readBffSession,
   revokeBffSession,
-  revokeToken,
   SESSION_COOKIE_NAME,
   TENANT_CTX_COOKIE_NAME,
 } from "@repo/auth";
-import { getEnv, requireEnv } from "@repo/platform";
+import { getEnv } from "@repo/platform";
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 
@@ -21,48 +20,28 @@ export async function GET(request: NextRequest): Promise<Response> {
 
   if (sessionRaw) {
     const secret = getEnv("SESSION_SECRET");
-    let refreshToken: string | null = null;
     if (secret) {
       const payload = await decodeSessionCookie(sessionRaw, secret);
-
       idToken = payload?.it ?? null;
-      refreshToken = payload?.rt ?? null;
     }
 
-    if (!idToken && !refreshToken) {
+    if (!idToken) {
       const bffSession = await readBffSession(sessionRaw, false);
       idToken = bffSession.payload?.it ?? null;
-      refreshToken = bffSession.payload?.rt ?? null;
-      await revokeBffSession(sessionRaw).catch(() => {
-        // Best-effort — always clear local session even if revocation fails
-      });
     }
 
-    if (refreshToken) {
-      const casUrl = requireEnv("CAS_ISSUER_URL");
-      const clientId = requireEnv("CAS_BFF_CLIENT_ID");
-      const clientSecret = requireEnv("CAS_BFF_CLIENT_SECRET");
-
-      await revokeToken({
-        casUrl,
-        clientId,
-        clientSecret,
-        token: refreshToken,
-        tokenTypeHint: "refresh_token",
-      }).catch(() => {
-        // Best-effort — always clear local session even if revocation fails
-      });
-    }
+    // Revokes the BFF session and its upstream refresh token at CAS
+    // (UiBffSessionService.revoke) — the refresh token never leaves the
+    // session store, so this is the only place it can be revoked.
+    await revokeBffSession(sessionRaw).catch(() => {
+      // Best-effort — always clear local session even if revocation fails
+    });
 
     cookieStore.delete(SESSION_COOKIE_NAME);
-    // Clear tenant-ctx so the next login shows the identifier step (fresh start),
-    // not the credential step for the previous tenant with potentially wrong providers.
+
     cookieStore.delete(TENANT_CTX_COOKIE_NAME);
   }
 
-  // Propagate logout to CAS via OIDC RP-Initiated Logout so the CAS session
-  // is also cleared. Without this, clicking "Sign in" again would silently
-  // re-authenticate the user from the still-active CAS session.
   const casUrl = getEnv("CAS_ISSUER_URL");
   const baseUrl = getEnv("JURIS_BASE_URL");
 

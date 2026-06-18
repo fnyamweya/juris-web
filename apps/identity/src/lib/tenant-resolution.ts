@@ -1,14 +1,11 @@
 import type { CasAccessTokenClaims, StoredTenant } from "@repo/auth";
 
-type TenantDto = {
-  id?: string;
+type MeTenantView = {
   tenantId?: string;
-  name?: string;
-  displayName?: string;
-  slug?: string;
+  tenantName?: string;
+  status?: string;
+  roles?: string[];
 };
-
-type TenantApiBody = TenantDto | { data?: TenantDto };
 
 function parseJwt<T>(token: string): T | null {
   try {
@@ -31,58 +28,43 @@ function slugify(value: string) {
     .replace(/^-|-$/gu, "");
 }
 
-function tenantFromBody(body: TenantApiBody, fallbackId: string): StoredTenant {
-  const data = ("data" in body && body.data ? body.data : body) as TenantDto;
-  const id = data.tenantId ?? data.id ?? fallbackId;
-  const name = data.displayName ?? data.name ?? id;
-  return {
-    id,
-    name,
-    slug: data.slug ?? (slugify(name) || id),
-  };
-}
-
-function isFulfilled<T>(
-  result: PromiseSettledResult<T>,
-): result is PromiseFulfilledResult<T> {
-  return result.status === "fulfilled";
-}
-
+/**
+ * Resolves the signed-in user's tenant memberships from the authoritative `GET /me/tenants`
+ * endpoint (AUTH-022). Realm-scoped access tokens no longer embed the full `tenant_memberships`
+ * list, so the membership list is fetched with the freshly issued access token rather than decoded
+ * from the token.
+ */
 export async function resolveTenantsFromToken(
   accessToken: string,
   civisCoreUrl: string,
 ): Promise<StoredTenant[]> {
-  const claims = parseJwt<CasAccessTokenClaims>(accessToken);
-  if (!claims?.tenant_memberships?.length) return [];
+  const res = await fetch(`${civisCoreUrl}/platform/api/v1/me/tenants`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  }).catch(() => null);
 
-  const results = await Promise.allSettled(
-    claims.tenant_memberships
-      .filter((membership) => membership.status !== "INACTIVE")
-      .map(async (membership): Promise<StoredTenant> => {
-        const fallback: StoredTenant = {
-          id: membership.tenant_id,
-          name: membership.tenant_id,
-          slug: membership.tenant_id,
-        };
+  if (!res?.ok) return [];
 
-        const res = await fetch(
-          `${civisCoreUrl}/platform/api/v1/tenants/${membership.tenant_id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              Accept: "application/json",
-            },
-          },
-        ).catch(() => null);
+  const body = (await res.json().catch(() => null)) as {
+    data?: MeTenantView[];
+  } | null;
+  const memberships = body?.data ?? [];
 
-        if (!res?.ok) return fallback;
-
-        const body = (await res.json()) as TenantApiBody;
-        return tenantFromBody(body, membership.tenant_id);
-      }),
-  );
-
-  return results.filter(isFulfilled).map((result) => result.value);
+  return memberships
+    .filter((membership): membership is MeTenantView & { tenantId: string } =>
+      Boolean(membership.tenantId),
+    )
+    .filter((membership) => membership.status !== "INACTIVE")
+    .map((membership) => {
+      const name = membership.tenantName ?? membership.tenantId;
+      return {
+        id: membership.tenantId,
+        name,
+        slug: slugify(name) || membership.tenantId,
+      };
+    });
 }
 
 export function activeTenantIdFromToken(accessToken: string) {

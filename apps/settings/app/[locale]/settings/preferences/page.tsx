@@ -16,6 +16,7 @@ import { getSettingsBreadcrumb, getSettingsNavItems } from "@/lib/navigation";
 import { AppearanceForm } from "./appearance-form";
 import { LocaleForm } from "./locale-form";
 import { MfaForm } from "./mfa-form";
+import { PasskeySetup } from "./passkey-setup";
 
 async function fetchPreferences(): Promise<UserPreferences | null> {
   try {
@@ -126,6 +127,19 @@ export default async function SettingsPreferencesPage({
           </CardHeader>
           <CardContent>
             <MfaForm locale={locale} initial={merged.mfa} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Passkeys</CardTitle>
+            <CardDescription>
+              Register a passkey or security key for phishing-resistant sign-in
+              and multi-factor authentication.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PasskeySetup />
           </CardContent>
         </Card>
       </div>

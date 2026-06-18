@@ -2,7 +2,6 @@ import { createAuthMiddleware } from "@repo/auth";
 import { defaultLocale, isLocale } from "@repo/i18n";
 import { getEnv } from "@repo/platform";
 import { CSP_NONCE_HEADER, createNonce, getSecurityHeaders } from "@repo/security";
-import { NextResponse } from "next/server";
 
 export const middleware = createAuthMiddleware(
   { app: "support" },

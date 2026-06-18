@@ -14,6 +14,7 @@ interface EnrollStartResult {
 
 interface Props {
   onClose: () => void;
+  requireStepUp: (fetcher: () => Promise<Response>) => Promise<Response | null>;
 }
 
 function groupSecret(secret: string): string {
@@ -47,7 +48,7 @@ function QrCode({ keyUri }: { keyUri: string }) {
   );
 }
 
-export function TotpSetupFlow({ onClose }: Props) {
+export function TotpSetupFlow({ onClose, requireStepUp }: Props) {
   const [step, setStep] = useState<Step>("scan");
   const [enrollData, setEnrollData] = useState<EnrollStartResult | null>(null);
   const [code, setCode] = useState("");
@@ -60,9 +61,15 @@ export function TotpSetupFlow({ onClose }: Props) {
     setLoading(true);
     setError(null);
 
-    fetch("/api/mfa/totp/enroll/start", { method: "POST", body: "{}" })
+    void requireStepUp(() =>
+      fetch("/api/mfa/totp/enroll/start", { method: "POST", body: "{}" }),
+    )
       .then(async (res) => {
         if (cancelled) return;
+        if (!res) {
+          onClose();
+          return;
+        }
         if (!res.ok) {
           const text = await res.text();
           setError(text || "Failed to start enrollment. Please try again.");
@@ -81,7 +88,7 @@ export function TotpSetupFlow({ onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [onClose, requireStepUp]);
 
   async function handleVerify() {
     if (code.length !== 6) {
@@ -91,11 +98,14 @@ export function TotpSetupFlow({ onClose }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/mfa/totp/enroll/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
+      const res = await requireStepUp(() =>
+        fetch("/api/mfa/totp/enroll/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code }),
+        }),
+      );
+      if (!res) return;
       if (!res.ok) {
         const text = await res.text();
         setError(text || "Verification failed. Check the code and try again.");
@@ -142,15 +152,14 @@ export function TotpSetupFlow({ onClose }: Props) {
         {enrollData && (
           <>
             <p className="text-sm text-muted-foreground">
-              Scan this QR code with your authenticator app (e.g. Google
-              Authenticator, Authy, or 1Password).
+              Scan this QR code with your authenticator app.
             </p>
             <div className="flex justify-center">
               <QrCode keyUri={enrollData.keyUri} />
             </div>
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground">
-                Or enter this key manually:
+                Can't scan? Enter this key manually.
               </p>
               <p className="rounded-md border bg-muted px-3 py-2 font-mono text-sm tracking-widest">
                 {groupSecret(enrollData.secret)}
@@ -159,14 +168,13 @@ export function TotpSetupFlow({ onClose }: Props) {
                 Issuer: {enrollData.issuer}
               </p>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={onClose} disabled={loading}>
-                Cancel
-              </Button>
-              <Button onClick={() => setStep("verify")} disabled={loading}>
-                I've scanned it
-              </Button>
-            </div>
+            <Button
+              className="w-full"
+              onClick={() => setStep("verify")}
+              disabled={loading}
+            >
+              Next
+            </Button>
           </>
         )}
       </div>
@@ -177,8 +185,7 @@ export function TotpSetupFlow({ onClose }: Props) {
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Enter the 6-digit code shown in your authenticator app to confirm
-          setup.
+          Enter the 6-digit code from your authenticator app.
         </p>
         {error && (
           <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -204,8 +211,9 @@ export function TotpSetupFlow({ onClose }: Props) {
             autoFocus
           />
         </div>
-        <div className="flex gap-2">
+        <div className="space-y-2">
           <Button
+            className="w-full"
             variant="outline"
             onClick={() => {
               setStep("scan");
@@ -216,7 +224,11 @@ export function TotpSetupFlow({ onClose }: Props) {
           >
             Back
           </Button>
-          <Button onClick={handleVerify} disabled={loading || code.length !== 6}>
+          <Button
+            className="w-full"
+            onClick={handleVerify}
+            disabled={loading || code.length !== 6}
+          >
             {loading ? "Verifying…" : "Verify"}
           </Button>
         </div>
@@ -227,8 +239,8 @@ export function TotpSetupFlow({ onClose }: Props) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Save these backup codes somewhere safe. Each code can only be used
-        once to sign in if you lose access to your authenticator app.
+        Save these backup codes now. Each code works once if you lose access to
+        your authenticator app.
       </p>
       <div className="grid grid-cols-2 gap-2 rounded-lg border bg-muted p-4">
         {backupCodes.map((c) => (
@@ -237,16 +249,16 @@ export function TotpSetupFlow({ onClose }: Props) {
           </span>
         ))}
       </div>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={downloadCodes}>
+      <div className="space-y-2">
+        <Button className="w-full" variant="outline" onClick={downloadCodes}>
           Download backup codes
         </Button>
-        <Button variant="outline" onClick={copyAll}>
+        <Button className="w-full" variant="outline" onClick={copyAll}>
           Copy all
         </Button>
         <Button
+          className="w-full"
           onClick={() => {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
             toast.success("Authenticator app set up successfully");
             onClose();
           }}

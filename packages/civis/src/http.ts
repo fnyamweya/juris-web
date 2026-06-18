@@ -54,9 +54,9 @@ async function parseResponse<T>(
 
   const payload = JSON.parse(text) as CivisResponse<T> | T;
   if (payload && typeof payload === "object" && "data" in payload) {
-    return payload as CivisResponse<T>;
+    return payload;
   }
-  return { data: payload as T };
+  return { data: payload };
 }
 
 export function createHttp(config: HttpConfig) {
@@ -90,9 +90,9 @@ export function createHttp(config: HttpConfig) {
     if (!res.ok) throw await parseError(res);
     const body = (await res.json()) as CivisResponse<T> | T;
     if (body && typeof body === "object" && "data" in body) {
-      return body as CivisResponse<T>;
+      return body;
     }
-    return { data: body as T };
+    return { data: body };
   }
 
   async function list<T>(

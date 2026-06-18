@@ -129,10 +129,7 @@ export async function getSession(): Promise<Session> {
     return buildSession(legacyPayload);
   }
 
-  const bffSession = await ensureBffSession(cookieValue, {
-    touch: true,
-    refreshThresholdSeconds: 60,
-  });
+  const bffSession = await ensureBffSession(cookieValue, { touch: true });
   if (bffSession.status !== "ACTIVE" || !bffSession.payload) {
     return ANONYMOUS_SESSION;
   }

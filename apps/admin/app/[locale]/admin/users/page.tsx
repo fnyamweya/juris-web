@@ -16,6 +16,7 @@ import {
   StatusBadge,
 } from "@repo/ui";
 import { createTranslator } from "next-intl";
+import { ResetPlatformUserPasswordButton } from "./credential-actions";
 
 const NAV = (locale: string) => [
   { label: "Console", href: `/${locale}/console`, permission: "console:read" },
@@ -79,7 +80,7 @@ export default async function AdminUsersPage({
           </CardHeader>
           <CardContent>
             <DataTable
-              columns={["Name", "Email", "Roles", "Status"]}
+              columns={["Name", "Email", "Roles", "Status", "Credentials"]}
               rows={users.map((u) => ({
                 Name: u.displayName,
                 Email: u.email,
@@ -89,6 +90,7 @@ export default async function AdminUsersPage({
                     status={u.status === "ACTIVE" ? "active" : "pending"}
                   />
                 ),
+                Credentials: <ResetPlatformUserPasswordButton userId={u.id} />,
               }))}
             />
           </CardContent>

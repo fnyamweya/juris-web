@@ -1,11 +1,22 @@
 import http from "node:http";
 import { URL } from "node:url";
 import { getEnv } from "@repo/platform";
+import { getSecurityHeaders, isTrustedOrigin } from "@repo/security";
 import packageMetadata from "../package.json";
 import { resolveRoute } from "./route-map";
 
 const port = getGatewayPort();
 const clientRoutes = new Map<string, ReturnType<typeof resolveRoute>>();
+
+const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const AUTH_RATE_LIMIT = 20;
+const GATEWAY_RATE_LIMIT = 300;
+const RATE_LIMIT_RETRY_AFTER_SECONDS = 60;
+const rateLimitBuckets = new Map<
+  string,
+  { count: number; windowStart: number }
+>();
 
 type ProxySocket = NodeJS.ReadWriteStream & {
   destroyed?: boolean;
@@ -19,11 +30,31 @@ function json(
   res: http.ServerResponse,
   statusCode: number,
   body: unknown,
+  extraHeaders?: Record<string, string>,
 ): void {
   res.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
+    ...getSecurityHeaders({ environment: "local" }),
+    ...extraHeaders,
   });
   res.end(JSON.stringify(body));
+}
+
+function checkRateLimit(key: string, limit: number): boolean {
+  const now = Date.now();
+  const bucket = rateLimitBuckets.get(key);
+
+  if (!bucket || now - bucket.windowStart >= RATE_LIMIT_WINDOW_MS) {
+    rateLimitBuckets.set(key, { count: 1, windowStart: now });
+    return true;
+  }
+
+  if (bucket.count >= limit) {
+    return false;
+  }
+
+  bucket.count += 1;
+  return true;
 }
 
 function routeForRequest(
@@ -110,6 +141,24 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // CSRF defense-in-depth: reject state-changing requests whose Origin header
+  // (when present) isn't one of our known app origins. Each Next.js app still
+  // performs its own CSRF checks; this just stops obviously cross-site writes
+  // at the edge.
+  if (req.method && STATE_CHANGING_METHODS.has(req.method)) {
+    const origin = firstHeader(req.headers.origin);
+    if (origin && !isTrustedOrigin(origin)) {
+      json(res, 403, {
+        success: false,
+        error: {
+          code: "origin_not_allowed",
+          message: "Request origin is not allowed",
+        },
+      });
+      return;
+    }
+  }
+
   const referer = firstHeader(req.headers.referer);
   const key = clientKey(req.socket);
   const route = routeForRequest(url.pathname, referer, clientRoutes.get(key));
@@ -119,6 +168,23 @@ const server = http.createServer((req, res) => {
       success: false,
       error: { code: "route_not_found", message: "Route not found" },
     });
+    return;
+  }
+
+  const rateLimitKey = `${key}:${route.binding === "IDENTITY" ? "auth" : "default"}`;
+  const rateLimit =
+    route.binding === "IDENTITY" ? AUTH_RATE_LIMIT : GATEWAY_RATE_LIMIT;
+
+  if (!checkRateLimit(rateLimitKey, rateLimit)) {
+    json(
+      res,
+      429,
+      {
+        success: false,
+        error: { code: "rate_limited", message: "Too many requests" },
+      },
+      { "retry-after": String(RATE_LIMIT_RETRY_AFTER_SECONDS) },
+    );
     return;
   }
 
@@ -153,12 +219,15 @@ const server = http.createServer((req, res) => {
   );
 
   proxyReq.on("error", (error) => {
+    console.error(
+      `juris-gateway: upstream error for route "${route.name}"`,
+      error,
+    );
     json(res, 502, {
       success: false,
       error: {
         code: "upstream_unavailable",
         message: "The " + route.name + " app is not reachable",
-        details: error.message,
       },
     });
   });

@@ -3,6 +3,8 @@
 import {
   createCivisClient,
   type CreatePolicyDefinitionRequest,
+  type InviteMemberRequest,
+  type PasswordResetIssued,
   type PolicyEffect,
   type PolicyLane,
   type PolicyScopeKind,
@@ -304,25 +306,38 @@ export async function tenantLifecycleAction(formData: FormData) {
   revalidatePath(`/${locale}/control-panel/tenants/${tenantId}`);
 }
 
-export async function inviteTenantMember(formData: FormData) {
+export async function inviteTenantMember(
+  tenantId: string,
+  payload: InviteMemberRequest,
+  locale: string,
+): Promise<PasswordResetIssued> {
   await requirePermission("control-panel:write");
 
-  const locale = value(formData, "locale") ?? "en";
-  const tenantId = value(formData, "tenantId");
-  const email = value(formData, "email");
-
-  if (!tenantId || !email) throw new Error("tenantId and email are required");
-
   const client = await createCivisClient();
-  await client.members.create(tenantId, {
-    email,
-    displayName: value(formData, "displayName") ?? email,
-    identityProviderSubject:
-      value(formData, "identityProviderSubject") ?? `civis-auth|${email}`,
-    roles: listValue(formData, "roles"),
-  });
+  const result = await client.members.invite(tenantId, payload);
 
   revalidatePath(`/${locale}/control-panel/tenants/${tenantId}`);
+  return result;
+}
+
+export async function resetTenantMemberPassword(
+  tenantId: string,
+  userId: string,
+): Promise<PasswordResetIssued> {
+  await requirePermission("control-panel:write");
+
+  const client = await createCivisClient();
+  return client.members.resetPassword(tenantId, userId);
+}
+
+export async function resendTenantMemberInvite(
+  tenantId: string,
+  userId: string,
+): Promise<PasswordResetIssued> {
+  await requirePermission("control-panel:write");
+
+  const client = await createCivisClient();
+  return client.members.resendInvite(tenantId, userId);
 }
 
 export async function tenantMemberLifecycleAction(formData: FormData) {

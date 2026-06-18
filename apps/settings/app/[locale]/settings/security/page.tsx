@@ -12,6 +12,7 @@ import {
 } from "@repo/ui";
 import { ShieldCheck } from "lucide-react";
 import { MyAccountPageShell } from "@/components/my-account-page-shell";
+import { ChangePasswordForm } from "./change-password-form";
 import { SessionsList } from "./sessions-list";
 import { TotpSection } from "./totp-section";
 import { TrustedDevicesList } from "./trusted-devices-list";
@@ -67,6 +68,21 @@ export default async function SettingsSecurityPage({
       description="Authenticator app, active sessions, trusted devices, and your organisation's authentication policy."
     >
       <div className="mx-auto max-w-2xl space-y-6">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="size-4 text-muted-foreground" />
+              <CardTitle>Password</CardTitle>
+            </div>
+            <CardDescription>
+              Choose a strong password you don&apos;t use anywhere else.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChangePasswordForm />
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">

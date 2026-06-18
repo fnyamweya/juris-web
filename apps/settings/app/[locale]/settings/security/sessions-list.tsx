@@ -52,10 +52,8 @@ export function SessionsList({ locale, sessions, currentSessionId }: Props) {
     startTransition(async () => {
       try {
         await revokeSession(locale, sessionId);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.success("Session revoked");
       } catch {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.error("Could not revoke session. Please try again.");
       } finally {
         setRevokingId(null);
@@ -77,14 +75,12 @@ export function SessionsList({ locale, sessions, currentSessionId }: Props) {
           locale,
           currentSessionId ?? "",
         );
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.success(
           count === 0
             ? "No other sessions to sign out"
             : `Signed out from ${count} other device${count > 1 ? "s" : ""}`,
         );
       } catch {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.error("Could not sign out other sessions. Please try again.");
       }
     });

@@ -3,7 +3,9 @@ import type {
   AssignRoleResponse,
   CreateMemberRequest,
   CursorPage,
+  InviteMemberRequest,
   ListMembersParams,
+  PasswordResetIssued,
   TenantMember,
 } from "../types";
 
@@ -90,6 +92,37 @@ export function createMembersResource(http: Http) {
         `/platform/api/v1/tenants/${tenantId}/members/${userId}/roles/${roleId}`,
       );
       return res?.data ?? null;
+    },
+
+    async resetPassword(
+      tenantId: string,
+      userId: string,
+    ): Promise<PasswordResetIssued> {
+      const res = await http.post<PasswordResetIssued>(
+        `/platform/api/v1/tenants/${tenantId}/members/${userId}/reset-password`,
+      );
+      return res!.data;
+    },
+
+    async invite(
+      tenantId: string,
+      req: InviteMemberRequest,
+    ): Promise<PasswordResetIssued> {
+      const res = await http.post<PasswordResetIssued>(
+        `/platform/api/v1/tenants/${tenantId}/members/invite`,
+        req,
+      );
+      return res!.data;
+    },
+
+    async resendInvite(
+      tenantId: string,
+      userId: string,
+    ): Promise<PasswordResetIssued> {
+      const res = await http.post<PasswordResetIssued>(
+        `/platform/api/v1/tenants/${tenantId}/members/${userId}/resend-invite`,
+      );
+      return res!.data;
     },
   };
 }

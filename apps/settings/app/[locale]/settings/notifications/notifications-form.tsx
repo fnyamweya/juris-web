@@ -40,10 +40,8 @@ export function NotificationsForm({ locale, tenantId, initial }: Props) {
     startTransition(async () => {
       try {
         await saveNotifications(locale, tenantId, update);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.success("Notification preferences saved");
       } catch {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.error("Failed to save. Please try again.");
       }
     });

@@ -109,7 +109,6 @@ async function buildCookie(
   const payload: SessionPayload = {
     at: ACCESS_TOKEN,
     it: ID_TOKEN,
-    rt: "refresh-token",
     exp: NOW_SECONDS + 3600,
     tenants: TENANTS,
     ...overrides,

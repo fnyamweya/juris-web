@@ -155,7 +155,7 @@ export function SessionLockTimerClient({
       redirectToLocked,
       Math.min(msUntilLock, MAX_TIMEOUT_MS),
     );
-  }, [redirectToLocked]);
+  }, [redirectToLocked, setShowWarning]);
 
   const sendHeartbeat = useCallback(() => {
     if (heartbeatInFlightRef.current) return;
@@ -178,7 +178,7 @@ export function SessionLockTimerClient({
         setExtending(false);
         setExtendFailed(true);
       });
-  }, [touchPath, redirectToLocked, scheduleTimers]);
+  }, [touchPath, redirectToLocked, scheduleTimers, setShowWarning]);
 
   const scheduleHeartbeat = useCallback(() => {
     if (heartbeatTimerRef.current) window.clearTimeout(heartbeatTimerRef.current);
@@ -228,9 +228,11 @@ export function SessionLockTimerClient({
 
     const onVisibility = () => {
       if (document.visibilityState === "visible") {
-        Date.now() >= lastActivityMsRef.current + idleTimeoutMsRef.current
-          ? redirectToLocked()
-          : scheduleTimers();
+        if (Date.now() >= lastActivityMsRef.current + idleTimeoutMsRef.current) {
+          redirectToLocked();
+        } else {
+          scheduleTimers();
+        }
       }
     };
     const onFocus = () => {
@@ -254,12 +256,11 @@ export function SessionLockTimerClient({
       if (heartbeatTimerRef.current) window.clearTimeout(heartbeatTimerRef.current);
       if (countdownIntervalRef.current) window.clearInterval(countdownIntervalRef.current);
     };
-  }, [idleTimeoutSeconds, redirectToLocked, scheduleTimers, scheduleHeartbeat]);
+  }, [idleTimeoutSeconds, redirectToLocked, scheduleTimers, scheduleHeartbeat, sendHeartbeat]);
 
   if (!showWarning) return null;
 
   const total = warnTotalSecondsRef.current || warningBeforeTimeoutSeconds;
-  const progress = Math.max(0, Math.min(1, countdown / total)); // 1 → 0
 
   return (
     <div

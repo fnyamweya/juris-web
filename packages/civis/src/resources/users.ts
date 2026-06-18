@@ -3,6 +3,7 @@ import type {
   CreateUserRequest,
   CursorPage,
   ListUsersParams,
+  PasswordResetIssued,
   PlatformUser,
 } from "../types";
 
@@ -48,6 +49,13 @@ export function createUsersResource(http: Http) {
 
     async revokeRole(userId: string, roleId: string): Promise<void> {
       await http.del(`/platform/api/v1/users/${userId}/roles/${roleId}`);
+    },
+
+    async resetPassword(userId: string): Promise<PasswordResetIssued> {
+      const res = await http.post<PasswordResetIssued>(
+        `/platform/api/v1/users/${userId}/reset-password`,
+      );
+      return res!.data;
     },
   };
 }

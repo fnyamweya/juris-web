@@ -21,10 +21,7 @@ export async function POST(): Promise<NextResponse> {
     );
   }
 
-  const session = await ensureBffSession(handle, {
-    touch: true,
-    refreshThresholdSeconds: 60,
-  });
+  const session = await ensureBffSession(handle, { touch: true });
 
   const active = session.status === "ACTIVE";
   return NextResponse.json(

@@ -46,6 +46,13 @@ export interface GuardOptions {
    * middleware will redirect to login if not authenticated.
    */
   redirectTo?: string;
+  /**
+   * Path to redirect authenticated users to when they lack the requested
+   * permission. Defaults to "/forbidden" (locale-prefixed by middleware),
+   * a dedicated access-denied page rather than bouncing back to a page the
+   * user may also lack permission for.
+   */
+  unauthorizedTo?: string;
 }
 
 // ─── Single permission ────────────────────────────────────────────────────────
@@ -60,11 +67,11 @@ export async function requirePermission(
   options?: GuardOptions,
 ): Promise<AuthenticatedSession> {
   const session = await getSession();
-  if (
-    session.status !== "authenticated" ||
-    !session.permissions.includes(permission)
-  ) {
+  if (session.status !== "authenticated") {
     redirect(options?.redirectTo ?? "/");
+  }
+  if (!session.permissions.includes(permission)) {
+    redirect(options?.unauthorizedTo ?? "/forbidden");
   }
   assertAuthenticated(session);
   return session;
@@ -81,11 +88,11 @@ export async function requireAnyPermission(
   options?: GuardOptions,
 ): Promise<AuthenticatedSession> {
   const session = await getSession();
-  if (
-    session.status !== "authenticated" ||
-    !permissions.some((p) => session.permissions.includes(p))
-  ) {
+  if (session.status !== "authenticated") {
     redirect(options?.redirectTo ?? "/");
+  }
+  if (!permissions.some((p) => session.permissions.includes(p))) {
+    redirect(options?.unauthorizedTo ?? "/forbidden");
   }
   assertAuthenticated(session);
   return session;
@@ -102,11 +109,11 @@ export async function requireAllPermissions(
   options?: GuardOptions,
 ): Promise<AuthenticatedSession> {
   const session = await getSession();
-  if (
-    session.status !== "authenticated" ||
-    !permissions.every((p) => session.permissions.includes(p))
-  ) {
+  if (session.status !== "authenticated") {
     redirect(options?.redirectTo ?? "/");
+  }
+  if (!permissions.every((p) => session.permissions.includes(p))) {
+    redirect(options?.unauthorizedTo ?? "/forbidden");
   }
   assertAuthenticated(session);
   return session;

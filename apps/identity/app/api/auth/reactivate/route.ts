@@ -1,4 +1,8 @@
-import { readBffSession, SESSION_COOKIE_NAME } from "@repo/auth";
+import {
+  readBffSession,
+  sanitizeReturnTo,
+  SESSION_COOKIE_NAME,
+} from "@repo/auth";
 import { getEnv, requireEnv } from "@repo/platform";
 import { NextResponse, type NextRequest } from "next/server";
 import {
@@ -33,10 +37,10 @@ function getSetCookieStrings(headers: Headers): string[] {
 export async function GET(request: NextRequest): Promise<Response> {
   const { searchParams } = request.nextUrl;
   const locale = searchParams.get("locale") ?? "en";
-  const returnTo = searchParams.get("returnTo") ?? `/${locale}/console`;
-  const safeReturnTo = returnTo.startsWith("/")
-    ? returnTo
-    : `/${locale}/console`;
+  const safeReturnTo = sanitizeReturnTo(
+    searchParams.get("returnTo"),
+    `/${locale}/console`,
+  );
   const handle = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   const baseUrl = requireEnv("JURIS_BASE_URL");
 

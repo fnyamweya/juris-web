@@ -70,7 +70,6 @@ export interface AuthMiddlewareDeps {
   applySecurityHeaders: (response: NextResponse, nonce: string) => void;
 }
 
-const REFRESH_THRESHOLD_SECONDS = 60;
 const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
 /**
@@ -189,7 +188,6 @@ export function createAuthMiddleware(
     // redirect the user to re-authenticate (safe — those cookies expire ≤7 days).
     const bffSession = await ensureBffSession(cookieValue, {
       touch: true,
-      refreshThresholdSeconds: REFRESH_THRESHOLD_SECONDS,
     }).catch(() => null);
 
     if (!bffSession || bffSession.status === "INVALID" || bffSession.status === "REVOKED" || bffSession.status === "EXPIRED") {

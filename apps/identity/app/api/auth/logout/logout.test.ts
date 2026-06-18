@@ -32,7 +32,6 @@ const VALID_SESSION: SessionPayload = {
     tenant_memberships: [],
   }),
   it: fakeJwt({ sub: "u1", name: "Test", email: "test@example.com" }),
-  rt: "refresh-token-to-revoke",
   exp: NOW + 3600,
   tenants: [],
 };
@@ -60,17 +59,8 @@ vi.mock("next/headers", () => ({
 vi.mock("@repo/platform", () => ({
   getEnv: vi.fn((key: string): string | undefined => {
     if (key === "SESSION_SECRET") return SECRET;
+    if (key === "CIVIS_CORE_URL") return "http://localhost:8080";
     return undefined;
-  }),
-  requireEnv: vi.fn((key: string): string => {
-    const envs: Record<string, string> = {
-      CAS_ISSUER_URL: "http://localhost:9000",
-      CAS_BFF_CLIENT_ID: "client-id",
-      CAS_BFF_CLIENT_SECRET: "client-secret",
-    };
-    const value = envs[key];
-    if (value) return value;
-    throw new Error(`requireEnv: missing ${key}`);
   }),
 }));
 
@@ -104,7 +94,7 @@ describe("GET /api/auth/logout", () => {
     expect(cookieStore.get(SESSION_COOKIE_NAME)).toBeUndefined();
   });
 
-  it("calls CAS revoke endpoint with the refresh token", async () => {
+  it("revokes the BFF session via /v1/ui/sessions/revoke", async () => {
     const encoded = await encodeSessionCookie(VALID_SESSION, SECRET);
     cookieStore.values.set(SESSION_COOKIE_NAME, encoded);
 
@@ -116,11 +106,13 @@ describe("GET /api/auth/logout", () => {
 
     const revokeCall = vi
       .mocked(fetch)
-      .mock.calls.find(([url]) => fetchUrl(url).includes("/oauth2/revoke"));
+      .mock.calls.find(([url]) => fetchUrl(url).includes("/v1/ui/sessions/revoke"));
     expect(revokeCall).toBeTruthy();
-    const body = new URLSearchParams(revokeCall![1]?.body as string);
-    expect(body.get("token")).toBe("refresh-token-to-revoke");
-    expect(body.get("token_type_hint")).toBe("refresh_token");
+    const body = JSON.parse(revokeCall![1]?.body as string) as { handle: string };
+    expect(body.handle).toBe(encoded);
+    const headers = revokeCall![1]?.headers as Record<string, string>;
+    expect(headers["X-Civis-Bff-Client-Id"]).toBeTruthy();
+    expect(headers["X-Civis-Bff-Client-Secret"]).toBeTruthy();
   });
 
   it("still redirects and clears cookie when no session cookie exists", async () => {
@@ -132,10 +124,10 @@ describe("GET /api/auth/logout", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toContain("/sw/logout");
-    // No fetch calls to CAS since there was no session
+    // No session revocation call since there was no session cookie
     const revokeCalls = vi
       .mocked(fetch)
-      .mock.calls.filter(([url]) => fetchUrl(url).includes("/oauth2/revoke"));
+      .mock.calls.filter(([url]) => fetchUrl(url).includes("/v1/ui/sessions/revoke"));
     expect(revokeCalls).toHaveLength(0);
   });
 

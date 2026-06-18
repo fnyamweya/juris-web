@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { encodeSessionCookie } from "@repo/auth";
 import type { SessionPayload } from "@repo/auth";
 import { NextRequest } from "next/server";
 
@@ -26,6 +25,7 @@ vi.mock("@repo/security", () => ({
 
 const SECRET = "test-secret-for-middleware-auth-tests";
 const NOW = Math.floor(Date.now() / 1000);
+const BFF_INTROSPECT_URL = "http://localhost:8080/v1/ui/sessions/introspect";
 
 function fakeJwt(payload: Record<string, unknown>): string {
   const enc = (o: unknown) =>
@@ -55,6 +55,13 @@ const REFRESHED_ACCESS_TOKEN = fakeJwt({
   exp: NOW + 7200,
 });
 
+const REFRESHED_SESSION: SessionPayload = {
+  ...VALID_SESSION,
+  at: REFRESHED_ACCESS_TOKEN,
+  rt: "rt-new",
+  exp: NOW + 7200,
+};
+
 // ─── Platform mock ────────────────────────────────────────────────────────────
 
 vi.mock("@repo/platform", () => ({
@@ -72,10 +79,6 @@ vi.mock("@repo/platform", () => ({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-async function buildSessionCookie(payload: SessionPayload): Promise<string> {
-  return encodeSessionCookie(payload, SECRET);
-}
-
 function makeRequest(path: string, sessionCookie?: string): NextRequest {
   const req = new NextRequest(`http://localhost:3000${path}`);
   if (sessionCookie) {
@@ -84,10 +87,45 @@ function makeRequest(path: string, sessionCookie?: string): NextRequest {
   return req;
 }
 
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function bffSessionResponse(
+  status: "ACTIVE" | "LOCKED" | "EXPIRED" | "REVOKED" | "INVALID",
+  payload: SessionPayload | null,
+) {
+  return jsonResponse({
+    data: {
+      status,
+      payload,
+      metadata:
+        status === "INVALID"
+          ? null
+          : {
+              subject: "u1",
+              userId: "u1",
+              email: "t@example.com",
+              activeTenantId: payload?.activeTenantId,
+            },
+    },
+  });
+}
+
+function mockBffSession(payload = VALID_SESSION) {
+  vi.mocked(fetch).mockResolvedValueOnce(
+    bffSessionResponse("ACTIVE", payload),
+  );
+}
+
 function mockRefreshSuccess() {
-  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-    new Response(
-      JSON.stringify({
+  vi.mocked(fetch)
+    .mockResolvedValueOnce(bffSessionResponse("ACTIVE", EXPIRED_SESSION))
+    .mockResolvedValueOnce(
+      jsonResponse({
         access_token: REFRESHED_ACCESS_TOKEN,
         id_token: VALID_SESSION.it,
         refresh_token: "rt-new",
@@ -95,17 +133,32 @@ function mockRefreshSuccess() {
         expires_in: 7200,
         scope: "openid",
       }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    ),
-  );
+    )
+    .mockResolvedValueOnce(bffSessionResponse("ACTIVE", REFRESHED_SESSION));
 }
 
 function mockRefreshFailure() {
-  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-    new Response(
-      JSON.stringify({ error: "invalid_grant" }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    ),
+  vi.mocked(fetch)
+    .mockResolvedValueOnce(bffSessionResponse("ACTIVE", EXPIRED_SESSION))
+    .mockResolvedValueOnce(jsonResponse({ error: "invalid_grant" }, 400))
+    .mockResolvedValueOnce(
+      bffSessionResponse("ACTIVE", EXPIRED_SESSION),
+    );
+}
+
+function fetchInputUrl(input: string | URL | Request) {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
+}
+
+function fetchUrls() {
+  return vi.mocked(fetch).mock.calls.map(([input]) => fetchInputUrl(input));
+}
+
+function findFetchCall(pattern: string) {
+  return vi.mocked(fetch).mock.calls.find(([input]) =>
+    fetchInputUrl(input).includes(pattern),
   );
 }
 
@@ -116,7 +169,7 @@ describe("console middleware auth guard", () => {
     vi.clearAllMocks();
     // Default fetch stub — individual tests override this as needed
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(null, { status: 200 }),
+      bffSessionResponse("INVALID", null),
     );
   });
 
@@ -136,19 +189,20 @@ describe("console middleware auth guard", () => {
   });
 
   it("passes through when a valid unexpired session exists", async () => {
-    const cookie = await buildSessionCookie(VALID_SESSION);
+    mockBffSession();
     const { middleware } = await import("./middleware");
-    const req = makeRequest("/en/console/overview", cookie);
+    const req = makeRequest("/en/console/overview", "opaque-session-handle");
     const response = await middleware(req);
     expect(response.status).toBe(200);
   });
 
   it("passes through and does NOT call CAS when token is not near expiry", async () => {
-    const cookie = await buildSessionCookie(VALID_SESSION);
+    mockBffSession();
     const { middleware } = await import("./middleware");
-    const req = makeRequest("/en/console/overview", cookie);
+    const req = makeRequest("/en/console/overview", "opaque-session-handle");
     await middleware(req);
-    expect(vi.mocked(fetch).mock.calls.length).toBe(0);
+    expect(fetchUrls()).toContain(BFF_INTROSPECT_URL);
+    expect(fetchUrls().some((url) => url.includes("/oauth2/token"))).toBe(false);
   });
 
   it("redirects to login with cleared cookie when session cookie is tampered", async () => {
@@ -185,10 +239,9 @@ describe("console middleware auth guard", () => {
   });
 
   it("refreshes token transparently when access token is expired and refresh succeeds", async () => {
-    const cookie = await buildSessionCookie(EXPIRED_SESSION);
     mockRefreshSuccess();
     const { middleware } = await import("./middleware");
-    const req = makeRequest("/en/console", cookie);
+    const req = makeRequest("/en/console", "opaque-session-handle");
     const response = await middleware(req);
 
     expect(response.status).toBe(200);
@@ -199,7 +252,7 @@ describe("console middleware auth guard", () => {
     expect(setCookie).not.toContain("juris-session=;");
 
     // CAS token endpoint was called
-    const tokenCall = vi.mocked(fetch).mock.calls[0];
+    const tokenCall = findFetchCall("/oauth2/token");
     expect(tokenCall?.[0]).toContain("/oauth2/token");
     const body = new URLSearchParams(tokenCall?.[1]?.body as string);
     expect(body.get("grant_type")).toBe("refresh_token");
@@ -207,10 +260,9 @@ describe("console middleware auth guard", () => {
   });
 
   it("redirects to login and clears cookie when token is expired and refresh fails", async () => {
-    const cookie = await buildSessionCookie(EXPIRED_SESSION);
     mockRefreshFailure();
     const { middleware } = await import("./middleware");
-    const req = makeRequest("/en/console", cookie);
+    const req = makeRequest("/en/console", "opaque-session-handle");
     const response = await middleware(req);
 
     expect(response.status).toBe(307);
@@ -237,9 +289,9 @@ describe("console middleware auth guard", () => {
   });
 
   it("includes security headers on every response", async () => {
-    const cookie = await buildSessionCookie(VALID_SESSION);
+    mockBffSession();
     const { middleware } = await import("./middleware");
-    const req = makeRequest("/en/console", cookie);
+    const req = makeRequest("/en/console", "opaque-session-handle");
     const response = await middleware(req);
     expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(response.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");

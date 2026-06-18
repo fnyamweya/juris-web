@@ -5,11 +5,8 @@ vi.mock("@repo/platform", () => ({
   getEnv: vi.fn((key: string): string | undefined => {
     if (key === "CIVIS_CORE_URL") return "http://localhost:8080";
     if (key === "CAS_ISSUER_URL") return "http://localhost:9000";
-    if (key === "CAS_BFF_CLIENT_ID") return "client-id";
-    if (key === "CAS_BFF_CLIENT_SECRET") return "client-secret";
-    if (key === "CIVIS_UI_AUTH_SESSION_API_SECRET") {
-      return "session-api-secret";
-    }
+    if (key === "CIVIS_UI_BFF_CLIENT_ID") return "identity-bff";
+    if (key === "CIVIS_UI_BFF_CLIENT_SECRET") return "identity-bff-secret";
     return undefined;
   }),
 }));
@@ -18,10 +15,9 @@ const nowSeconds = () => Math.floor(Date.now() / 1000);
 
 function payload(overrides: Partial<SessionPayload> = {}): SessionPayload {
   return {
-    at: "access-token-old",
-    it: "id-token-old",
-    rt: "refresh-token-old",
-    exp: nowSeconds() - 10,
+    at: "access-token",
+    it: "id-token",
+    exp: nowSeconds() + 3600,
     tenants: [],
     ...overrides,
   };
@@ -45,11 +41,8 @@ function activeSession(sessionPayload: SessionPayload): BffSessionResponse {
   };
 }
 
-function refreshFailure(): Response {
-  return new Response(JSON.stringify({ error: "invalid_grant" }), {
-    status: 400,
-    headers: { "Content-Type": "application/json" },
-  });
+function invalidSession(): BffSessionResponse {
+  return { status: "INVALID", payload: null, metadata: null };
 }
 
 describe("ensureBffSession()", () => {
@@ -57,63 +50,70 @@ describe("ensureBffSession()", () => {
     vi.restoreAllMocks();
   });
 
-  it("re-reads and returns the stored session when a parallel request already refreshed it", async () => {
-    const expiringPayload = payload();
-    const refreshedPayload = payload({
-      at: "access-token-new",
-      it: "id-token-new",
-      rt: "refresh-token-new",
-      exp: nowSeconds() + 3600,
-    });
-
+  it("sends per-workload client credentials and trusts an ACTIVE introspect result as-is", async () => {
+    const activePayload = payload();
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(sessionResponse(activeSession(expiringPayload)))
-      .mockResolvedValueOnce(refreshFailure())
-      .mockResolvedValueOnce(sessionResponse(activeSession(refreshedPayload)));
+      .mockResolvedValueOnce(sessionResponse(activeSession(activePayload)));
 
     const { ensureBffSession } = await import("./bff-session");
-    const result = await ensureBffSession("session-handle", {
-      touch: true,
-      refreshThresholdSeconds: 60,
-    });
+    const result = await ensureBffSession("session-handle", { touch: true });
 
     expect(result.status).toBe("ACTIVE");
-    expect(result.payload).toEqual(refreshedPayload);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(result.payload).toEqual(activePayload);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe("http://localhost:8080/v1/ui/sessions/introspect");
+    expect(init?.body).toBe(
       JSON.stringify({ handle: "session-handle", touch: true }),
     );
+    const headers = init?.headers as Record<string, string>;
+    expect(headers["X-Civis-Bff-Client-Id"]).toBe("identity-bff");
+    expect(headers["X-Civis-Bff-Client-Secret"]).toBe("identity-bff-secret");
+    expect(headers).not.toHaveProperty("X-Civis-Bff-Session-Secret");
+  });
 
-    const refreshBody = new URLSearchParams(
-      fetchMock.mock.calls[1]?.[1]?.body as string,
-    );
-    expect(refreshBody.get("grant_type")).toBe("refresh_token");
-    expect(refreshBody.get("refresh_token")).toBe("refresh-token-old");
+  it("retries once when introspect returns INVALID, and returns the retry result", async () => {
+    const activePayload = payload();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(sessionResponse(invalidSession()))
+      .mockResolvedValueOnce(sessionResponse(activeSession(activePayload)));
 
-    expect(fetchMock.mock.calls[2]?.[1]?.body).toBe(
-      JSON.stringify({ handle: "session-handle", touch: false }),
+    const { ensureBffSession } = await import("./bff-session");
+    const result = await ensureBffSession("session-handle", { touch: true });
+
+    expect(result.status).toBe("ACTIVE");
+    expect(result.payload).toEqual(activePayload);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[1]?.body).toBe(
+      JSON.stringify({ handle: "session-handle", touch: true }),
     );
   });
 
-  it("returns EXPIRED when refresh fails and the re-read session is unchanged", async () => {
-    const expiringPayload = payload();
-
+  it("returns INVALID when both introspect attempts fail", async () => {
     vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(sessionResponse(activeSession(expiringPayload)))
-      .mockResolvedValueOnce(refreshFailure())
-      .mockResolvedValueOnce(sessionResponse(activeSession(expiringPayload)));
+      .mockResolvedValueOnce(sessionResponse(invalidSession()))
+      .mockResolvedValueOnce(sessionResponse(invalidSession()));
 
     const { ensureBffSession } = await import("./bff-session");
-    const result = await ensureBffSession("session-handle", {
-      refreshThresholdSeconds: 60,
-    });
+    const result = await ensureBffSession("session-handle", { touch: true });
 
-    expect(result).toEqual({
-      status: "EXPIRED",
-      payload: null,
-      metadata: null,
-    });
+    expect(result).toEqual(invalidSession());
+  });
+
+  it("does not retry non-INVALID statuses such as EXPIRED or REVOKED", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        sessionResponse({ status: "EXPIRED", payload: null, metadata: null }),
+      );
+
+    const { ensureBffSession } = await import("./bff-session");
+    const result = await ensureBffSession("session-handle");
+
+    expect(result.status).toBe("EXPIRED");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

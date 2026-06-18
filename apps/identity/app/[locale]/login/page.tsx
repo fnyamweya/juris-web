@@ -16,7 +16,13 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   access_denied: "Access was denied. Please contact your administrator.",
   auth_unavailable:
     "The authentication service is temporarily unavailable. Please try again shortly.",
+  reauth_failed: "We couldn't verify your identity. Please sign in again.",
+  session_store_unavailable:
+    "We couldn't start your session. Please try again shortly.",
 };
+
+const DEFAULT_AUTH_ERROR_MESSAGE =
+  "We couldn't sign you in. Please try again.";
 
 export default async function LoginPage({
   params,
@@ -38,7 +44,7 @@ export default async function LoginPage({
   }
 
   const errorMessage = error
-    ? (AUTH_ERROR_MESSAGES[error] ?? decodeURIComponent(error))
+    ? (AUTH_ERROR_MESSAGES[error] ?? DEFAULT_AUTH_ERROR_MESSAGE)
     : null;
 
   const safeReturnTo = returnTo?.startsWith("/") ? returnTo : `/${locale}/console`;

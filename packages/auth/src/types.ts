@@ -91,8 +91,6 @@ export type SessionPayload = {
   at: string;
   /** Raw id_token JWT */
   it: string;
-  /** Opaque refresh token */
-  rt: string;
   /** Access token expiry as unix seconds (matches JWT `exp`) */
   exp: number;
   /** Resolved tenant display data cached at login time */

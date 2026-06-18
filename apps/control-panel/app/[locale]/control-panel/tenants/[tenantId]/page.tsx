@@ -31,12 +31,16 @@ import {
 import {
   assignTenantContext,
   assignTenantRole,
-  inviteTenantMember,
   tenantLifecycleAction,
   tenantMemberLifecycleAction,
   updateTenantAuthPolicies,
   upsertPolicyBinding,
 } from "../../server-actions";
+import {
+  InviteMemberForm,
+  ResendInviteButton,
+  ResetMemberPasswordButton,
+} from "./credential-actions";
 
 const inputClass =
   "h-9 rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30";
@@ -189,23 +193,11 @@ export default async function TenantDetailsPage({
             <CardHeader>
               <CardTitle>Invite Tenant Member</CardTitle>
               <CardDescription>
-                Uses the register tenant member endpoint with initial roles.
+                Issues a one-time invite link and emails it if Engage is configured for this tenant.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form action={inviteTenantMember} className="grid gap-3 md:grid-cols-5">
-                <input type="hidden" name="locale" value={locale} />
-                <input type="hidden" name="tenantId" value={tenantId} />
-                <input className={inputClass} name="email" type="email" placeholder="Email" required />
-                <input className={inputClass} name="displayName" placeholder="Display name" />
-                <input
-                  className={inputClass}
-                  name="identityProviderSubject"
-                  placeholder="Identity subject"
-                />
-                <input className={inputClass} name="roles" defaultValue="TENANT_MEMBER" />
-                <Button type="submit">Invite</Button>
-              </form>
+              <InviteMemberForm tenantId={tenantId} locale={locale} />
             </CardContent>
           </Card>
           <Card>
@@ -217,7 +209,7 @@ export default async function TenantDetailsPage({
             </CardHeader>
             <CardContent>
               <DataTable
-                columns={["Member", "Roles", "Status", "Role action", "Lifecycle"]}
+                columns={["Member", "Roles", "Status", "Credentials", "Role action", "Lifecycle"]}
                 rows={bundle.members.map((member) => ({
                   Member: (
                     <div>
@@ -233,6 +225,14 @@ export default async function TenantDetailsPage({
                     </div>
                   ),
                   Status: <StatusBadge status={statusTone(member.status)} />,
+                  Credentials: (
+                    <div className="flex flex-wrap gap-2">
+                      <ResetMemberPasswordButton tenantId={tenantId} userId={member.userId} />
+                      {member.status === "PENDING" ? (
+                        <ResendInviteButton tenantId={tenantId} userId={member.userId} />
+                      ) : null}
+                    </div>
+                  ),
                   "Role action": (
                     <form action={assignTenantRole} className="flex gap-2">
                       <input type="hidden" name="locale" value={locale} />

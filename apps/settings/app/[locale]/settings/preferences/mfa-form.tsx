@@ -52,10 +52,8 @@ export function MfaForm({ locale, initial }: Props) {
     startTransition(async () => {
       try {
         await saveMfaPreferences(locale, { preferredMethod });
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.success("MFA preference saved");
       } catch {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.error("Failed to save. Please try again.");
       }
     });
@@ -65,14 +63,12 @@ export function MfaForm({ locale, initial }: Props) {
     startTransition(async () => {
       try {
         await saveMfaPreferences(locale, { rememberDeviceDays: days });
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.success(
           days === 0
             ? "Devices will never be trusted"
             : `Devices trusted for ${days} days after MFA`,
         );
       } catch {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         toast.error("Failed to save. Please try again.");
       }
     });
